@@ -1,0 +1,1947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Navigation Assistant – Google Search</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <style>
+    body{background:#121212;color:#eee;font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0}
+    .container{max-width:1000px;margin:0 auto;padding:18px}
+    h1{color:#4CAF50;margin:8px 0}
+    .grid{display:grid;gap:12px;grid-template-columns:1fr 320px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}}
+    .panel{background:#1f1f1f;border:1px solid #2c2c2c;border-radius:10px;padding:14px}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+    .btn{background:#4CAF50;border:none;color:#fff;padding:10px 14px;border-radius:8px;font-weight:600;cursor:pointer}
+    .btn.secondary{background:#2e7dd7}
+    .btn.danger{background:#c33}
+    .btn:disabled{background:#555;cursor:not-allowed}
+    #map{height:420px;border-radius:8px;border:2px solid #4CAF50}
+    .item{background:#232323;border:1px solid #343434;border-radius:8px;padding:10px;margin-bottom:8px}
+    .title{font-weight:700}
+    .small{color:#aaa;font-size:12px}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🎯 Navigation Assistant – Google Search</h1>
+  <!-- Navigation Instructions - Always Visible at Top -->
+  <!-- Unified Smart Navigation -->
+  <div class="panel" style="margin-bottom:12px;background:#2a2a2a;border:2px solid #4CAF50;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-weight:700;color:#4CAF50">🎯 Smart Navigation</div>
+      <div style="display:flex;gap:6px;">
+        <button id="walkModeBtn" class="btn" style="padding:6px 12px;font-size:13px" onclick="setRoutingMode('foot')">🚶 Walk</button>
+        <button id="driveModeBtn" class="btn" style="padding:6px 12px;font-size:13px;background:#666" onclick="setRoutingMode('car')">🚗 Drive</button>
+      </div>
+    </div>
+    <div><span class="small">Instruction:</span> <div id="unifiedInstruction" style="font-weight:600;color:#fff">-</div></div>
+    <div class="small" style="margin-top:6px">Distance: <span id="unifiedDistance" style="color:#4CAF50">-</span> • Time: <span id="unifiedTime" style="color:#4CAF50">-</span></div>
+    <div class="small" style="margin-top:4px">Context: <span id="instructionContext" style="color:#FF9800">-</span> • Mode: <span id="routingMode" style="color:#2e7dd7">🚶 Walking</span></div>
+    <div class="controls" style="margin-top:8px">
+      <button class="btn secondary" onclick="speakUnifiedInstruction()">🔊 Speak Instruction</button>
+      <button class="btn secondary" onclick="checkNavigationStatus()">🔍 Check Status</button>
+      <button class="btn secondary" onclick="testNavigationAPI()">🧪 Test API</button>
+      <button class="btn secondary" onclick="testTTS()">🔊 Test TTS</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <div class="controls">
+          <input id="q" placeholder="Search (e.g., cafes, pharmacy, Starbucks)" style="flex:1;min-width:220px;padding:10px;border-radius:8px;border:2px solid #4CAF50;background:#121212;color:#eee" />
+          <button class="btn" onclick="doSearch()">Search with Google</button>
+          <button class="btn secondary" onclick="getLocation()">📍 Get Location</button>
+          <button class="btn secondary" onclick="startCamera()">📷 Start Camera</button>
+          <button class="btn primary" onclick="capturePhoto()" id="captureBtn" disabled>📸 Take Photo</button>
+          <button class="btn" onclick="toggleLiveVision()" id="liveVisionBtn" disabled style="background:#FF9800">👁️ Live Monitor OFF</button>
+          <button class="btn danger" onclick="stopNav()">⏹️ Stop</button>
+        </div>
+        <div id="status" class="small">Idle</div>
+        <div id="status" class="small">Idle - Click "Start Navigation" and "Get Location" first, then search</div>
+      </div>
+
+      <div class="panel" style="margin-top:12px">
+        <div id="map"></div>
+        <div style="margin-top:6px">
+          <video id="visionPreview" autoplay playsinline muted style="width:240px;border:1px solid #333;display:none"></video>
+          <canvas id="photoCanvas" style="width:240px;border:1px solid #333;display:none;"></canvas>
+          <div id="photoStatus" class="small" style="margin-top:4px;display:none;">📸 Photo captured! Analyzing...</div>
+          <div id="visionResults" class="small" style="margin-top:8px;padding:10px;background:#1a1a1a;border-radius:6px;display:none;">
+            <div style="font-weight:700;margin-bottom:6px">🔍 Vision Analysis</div>
+            <div id="visionText" style="color:#4CAF50;"></div>
+          </div>
+        </div>
+        <div class="controls" style="margin-top:10px">
+          <button class="btn secondary" onclick="centerOnMe()">Center on me</button>
+          <button class="btn secondary" onclick="zoomToRoute()">Show full route</button>
+          <button class="btn secondary" onclick="toggleInstructionMarkers()">🎯 Toggle instruction points</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div style="font-weight:700;margin-bottom:8px">📍 Search Results</div>
+        <div id="results" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Map
+  let map, meMarker, routeLine, destMarker, instructionMarkers=[], showMarkers=true;
+  let pollTimer=null, instrTimer=null, unifiedTimer=null, locationWatcher=null;
+  let currentRoutingMode = 'foot'; // Track current routing mode
+  
+  // Live Vision Monitoring
+  let liveVisionEnabled = false;
+  let liveVisionTimer = null;
+  let lastCaptureTime = 0;
+  const LIVE_VISION_INTERVAL = 5000; // Capture every 5 seconds
+
+  // Routing Mode Management
+  async function setRoutingMode(mode) {
+    try {
+      console.log(`🚶/🚗 Setting routing mode to: ${mode}`);
+      
+      const response = await fetch('/api/routing-mode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getSessionHeaders()
+        },
+        body: JSON.stringify({ mode }),
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        currentRoutingMode = data.mode;
+        updateRoutingModeUI(data.mode, data.mode_name);
+        setStatus(`Routing mode: ${data.mode_name}`);
+        console.log(`✅ Routing mode set to: ${data.mode_name}`);
+      } else {
+        console.error('Failed to set routing mode:', data.message);
+        setStatus(`Error: ${data.message}`);
+      }
+    } catch (e) {
+      console.error('Error setting routing mode:', e);
+      setStatus('Error changing routing mode');
+    }
+  }
+  
+  function updateRoutingModeUI(mode, modeName) {
+    // Update button states
+    const walkBtn = document.getElementById('walkModeBtn');
+    const driveBtn = document.getElementById('driveModeBtn');
+    
+    if (mode === 'foot') {
+      walkBtn.style.background = '#4CAF50';
+      driveBtn.style.background = '#666';
+    } else {
+      walkBtn.style.background = '#666';
+      driveBtn.style.background = '#4CAF50';
+    }
+    
+    // Update mode display
+    const modeDisplay = document.getElementById('routingMode');
+    if (modeDisplay) {
+      modeDisplay.textContent = mode === 'foot' ? '🚶 Walking' : '🚗 Driving';
+    }
+  }
+  
+  async function loadRoutingMode() {
+    try {
+      const response = await fetch('/api/routing-mode', {
+        headers: getSessionHeaders(),
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        currentRoutingMode = data.mode;
+        updateRoutingModeUI(data.mode, data.mode_name);
+      }
+    } catch (e) {
+      console.error('Error loading routing mode:', e);
+    }
+  }
+
+  function initMap(){
+    try {
+    map=L.map('map').setView([24.4539,54.3773], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+      console.log('Map initialized successfully');
+    } catch(e) {
+      console.error('Map initialization failed:', e);
+    }
+  }
+  
+  // Initialize map when page loads
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 [INIT] Page loaded, initializing...');
+    initMap();
+    
+    // Load current routing mode
+    loadRoutingMode();
+    
+    // Automatically get initial location
+    console.log('📍 [INIT] Getting initial location...');
+    setTimeout(() => {
+      getLocation();
+      
+      // Start continuous location tracking after getting initial position
+      setTimeout(() => {
+        console.log('📍 [INIT] Starting automatic location tracking...');
+        startContinuousLocationTracking();
+      }, 2000);
+    }, 500);
+  });
+
+  function setStatus(t){document.getElementById('status').textContent=t}
+
+  // Session management - multi-layer for reliability
+  let currentSessionId = null;
+  
+  function getOrCreateSessionId() {
+    // Layer 1: Check localStorage (most reliable on HTTPS)
+    let sid = localStorage.getItem('nav_session_id');
+    
+    if (sid) {
+      console.log('📝 [SESSION] Using localStorage session:', sid);
+      return sid;
+    }
+    
+    // Layer 2: Check cookie
+    const cookieMatch = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('sid='));
+    
+    if (cookieMatch) {
+      sid = cookieMatch.split('=')[1];
+      console.log('📝 [SESSION] Using cookie session:', sid);
+      // Save to localStorage for future use
+      localStorage.setItem('nav_session_id', sid);
+      return sid;
+    }
+    
+    // Layer 3: Generate new unique session ID
+    sid = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    console.log('📝 [SESSION] Created NEW session:', sid);
+    
+    // Store in both localStorage and try to set cookie
+    localStorage.setItem('nav_session_id', sid);
+    document.cookie = `sid=${sid}; max-age=86400; path=/; SameSite=Lax`;
+    
+    return sid;
+  }
+  
+  // Initialize session on page load
+  currentSessionId = getOrCreateSessionId();
+  
+  // Display session ID for user identification
+  console.log('═══════════════════════════════════════════════════════');
+  console.log('🆔 YOUR SESSION ID:', currentSessionId);
+  console.log('📱 This uniquely identifies YOUR navigation session');
+  console.log('👥 Other users will have DIFFERENT session IDs');
+  console.log('═══════════════════════════════════════════════════════');
+  
+  // Helper function to get headers with session ID
+  function getSessionHeaders(additionalHeaders = {}) {
+    return {
+      'X-Client-ID': currentSessionId,
+      'Content-Type': 'application/json',
+      ...additionalHeaders
+    };
+  }
+
+  async function startNavigation(){
+    try{
+      setStatus('Starting navigation system…');
+      console.log('Calling /api/start...');
+      const r=await fetch('/api/start',{method:'POST',credentials:'include'});
+      const data=await r.json();
+      console.log('Start navigation response:', data);
+      console.log('Response status:', r.status);
+      if(!data.success){setStatus('Start failed: '+(data.message||''));return}
+      setStatus('Navigation system started');
+      await speakText('Navigation system started successfully');
+      
+      // Store session ID for debugging and use in other requests
+      if(data.session_id) {
+        currentSessionId = data.session_id;
+        console.log('Session ID stored:', currentSessionId);
+      } else {
+        console.log('No session ID in response!');
+      }
+    }catch(e){
+      console.error('Start navigation error:', e);
+      setStatus('Start error: '+e.message);
+    }
+  }
+
+  async function getLocation(){
+    try{
+      setStatus('Requesting location…');
+      navigator.geolocation.getCurrentPosition(
+        async pos=>{
+          const {latitude,longitude,accuracy}=pos.coords;
+          console.log(`✅ [GPS] Got position: [${latitude.toFixed(6)}, ${longitude.toFixed(6)}] ±${Math.round(accuracy)}m`);
+          await fetch('/api/location',{method:'POST',headers:getSessionHeaders(),body:JSON.stringify({latitude,longitude}),credentials:'include'});
+          if(meMarker){meMarker.setLatLng([latitude,longitude]);}
+          else{meMarker=L.circleMarker([latitude,longitude],{radius:10,color:'#ffffff',fillColor:'#2e7dd7',fillOpacity:1,weight:3}).addTo(map).bindPopup('You are here');}
+          map.setView([latitude,longitude], 15);
+          setStatus('Location updated');
+          await speakText('Location updated successfully');
+        },
+        async error=>{
+          console.error('❌ [GPS] Error:', error.message, 'Code:', error.code);
+          if(error.code === 1){
+            setStatus('❌ Location permission denied - check browser settings');
+            await speakText('Location permission denied. Please allow location access in your browser settings.');
+          } else if(error.code === 2){
+            setStatus('❌ Location unavailable - GPS/WiFi positioning failed');
+            await speakText('Location unavailable. If on desktop, try using mobile device.');
+            // Offer manual location input
+            const manualLat = prompt('GPS unavailable. Enter your latitude (or Cancel):');
+            if(manualLat){
+              const manualLng = prompt('Enter your longitude:');
+              if(manualLng){
+                const lat = parseFloat(manualLat);
+                const lng = parseFloat(manualLng);
+                if(!isNaN(lat) && !isNaN(lng)){
+                  console.log(`📍 [MANUAL] Using manual location: [${lat}, ${lng}]`);
+                  await fetch('/api/location',{method:'POST',headers:getSessionHeaders(),body:JSON.stringify({latitude:lat,longitude:lng}),credentials:'include'});
+                  if(meMarker){meMarker.setLatLng([lat,lng]);}
+                  else{meMarker=L.circleMarker([lat,lng],{radius:10,color:'#ffffff',fillColor:'#ff9800',fillOpacity:1,weight:3}).addTo(map).bindPopup('Manual location');}
+                  map.setView([lat,lng], 15);
+                  setStatus('Manual location set');
+                  await speakText('Manual location set successfully');
+                }
+              }
+            }
+          } else if(error.code === 3){
+            setStatus('❌ Location timeout - GPS taking too long');
+            await speakText('Location timeout. Trying lower accuracy mode...');
+            // Retry with lower accuracy
+            navigator.geolocation.getCurrentPosition(
+              async pos2=>{
+                const {latitude,longitude}=pos2.coords;
+                console.log(`✅ [GPS-FALLBACK] Got position: [${latitude.toFixed(6)}, ${longitude.toFixed(6)}]`);
+                await fetch('/api/location',{method:'POST',headers:getSessionHeaders(),body:JSON.stringify({latitude,longitude}),credentials:'include'});
+                if(meMarker){meMarker.setLatLng([latitude,longitude]);}
+                else{meMarker=L.circleMarker([latitude,longitude],{radius:10,color:'#ffffff',fillColor:'#2e7dd7',fillOpacity:1,weight:3}).addTo(map).bindPopup('You are here');}
+                map.setView([latitude,longitude], 15);
+                setStatus('Location updated (low accuracy mode)');
+                await speakText('Location updated');
+              },
+              ()=>{setStatus('Location completely failed')},
+              {enableHighAccuracy:false,timeout:60000,maximumAge:120000}
+            );
+          }
+        },
+        {
+          enableHighAccuracy:false,  // Start with low accuracy to be faster
+          timeout:60000,  // 60 seconds
+          maximumAge:30000
+        }
+      );
+    }catch(e){
+      console.error('Location error:', e);
+      setStatus('Location error: '+e.message);
+    }
+  }
+
+  async function doSearch(){
+    try{
+      console.log('doSearch function called');
+      const q=document.getElementById('q').value.trim();
+      if(!q){setStatus('Enter a query');return}
+      
+      // First, ensure we have location
+      let currentLat = null, currentLng = null;
+      
+      if(meMarker) {
+        currentLat = meMarker.getLatLng().lat;
+        currentLng = meMarker.getLatLng().lng;
+        console.log('Using marker location:', currentLat, currentLng);
+      } else {
+        // Try to get location from browser if marker not set
+        setStatus('Getting your location first…');
+        try {
+          const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              timeout: 5000,
+              maximumAge: 30000
+            });
+          });
+          currentLat = position.coords.latitude;
+          currentLng = position.coords.longitude;
+          
+          // Update marker with current location
+          if(meMarker){meMarker.setLatLng([currentLat,currentLng]);}
+          else{meMarker=L.circleMarker([currentLat,currentLng],{radius:7,color:'#2e7dd7',fillColor:'#2e7dd7',fillOpacity:.9}).addTo(map).bindPopup('You are here');}
+          map.setView([currentLat,currentLng], 15);
+          
+          // Update backend with location
+          await fetch('/api/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({latitude:currentLat,longitude:currentLng}),credentials:'include'});
+          
+          console.log('Got location from browser:', currentLat, currentLng);
+        } catch(locErr) {
+          console.warn('Could not get location:', locErr);
+          setStatus('Warning: Searching without location (results may not be local)');
+        }
+      }
+      
+      setStatus('Searching Google…');
+      console.log('Searching for:', q);
+      
+      // Search with location priority for nearby results
+      const searchParams = {
+        query: q,
+        location: (currentLat && currentLng) ? {lat: currentLat, lng: currentLng} : null,
+        radius: currentLat ? 5000 : 50000  // 5km if we have location, 50km for wider search
+      };
+      
+      console.log('Search params:', searchParams);
+      
+      const r=await fetch('/api/google/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(searchParams),credentials:'include'});
+      const data=await r.json();
+      if(!data.success){setStatus('Search failed: '+(data.message||''));return}
+      
+      renderResults(data.results||[]);
+      setStatus(`Found ${data.results.length} results`);
+      
+      // Announce search results
+      if(data.results && data.results.length > 0) {
+        const firstResult = data.results[0];
+        const locationInfo = currentLat ? ' nearby' : '';
+        await speakText(`Found ${data.results.length} results${locationInfo}. First result: ${firstResult.name}${firstResult.distance_meters ? ', ' + Math.round(firstResult.distance_meters) + ' meters away' : ''}`);
+      } else {
+        await speakText('No results found for your search. Try a different search term.');
+      }
+    }catch(e){
+      console.error('Search error:', e);
+      setStatus('Search error: '+e.message);
+    }
+  }
+
+  function renderResults(list){
+    const box=document.getElementById('results');
+    box.innerHTML='';
+    if(!list.length){box.innerHTML='<div class="small">No results</div>';return}
+    list.forEach(p=>{
+      const div=document.createElement('div');div.className='item';
+      div.innerHTML=`<div class="title">${p.name||'Place'}</div>
+        <div class="small">${p.address||''}</div>
+        <div class="small">${p.distance_meters? (p.distance_meters+' m') : ''}</div>
+        <div class="controls" style="margin-top:8px">
+          <button class="btn" onclick='startNav(${JSON.stringify({place_id:p.place_id,name:p.name,lat:p.location?.lat,lng:p.location?.lng})})'>Navigate</button>
+          <button class="btn secondary" onclick='previewOnMap(${p.location?.lat},${p.location?.lng}, ${JSON.stringify(p.name)})'>Preview</button>
+          <button class="btn secondary" onclick='speakSearchResult(${JSON.stringify(p)})'>🔊 Speak</button>
+        </div>`;
+      box.appendChild(div);
+    });
+  }
+
+  function previewOnMap(lat,lng,name){
+    if(!(lat&&lng))return;
+    if(destMarker){map.removeLayer(destMarker)}
+    destMarker=L.marker([lat,lng]).addTo(map).bindPopup(name||'Destination');
+    map.setView([lat,lng],15);
+  }
+
+  async function ensureReady(){
+    try{
+      // start backend if needed
+      await fetch('/api/start',{method:'POST',credentials:'include'}).catch(()=>{});
+      // ensure we have current location
+      const st = await (await fetch('/api/status',{credentials:'include'})).json();
+      if(!st.has_current_location){
+        await getLocation();
+        const t0=Date.now();
+        while(Date.now()-t0<7000){
+          const s2=await (await fetch('/api/status',{credentials:'include'})).json();
+          if(s2.has_current_location) break;
+          await new Promise(r=>setTimeout(r,400));
+        }
+      }
+    }catch(e){console.warn('ensureReady warning', e)}
+  }
+
+  async function startNav(payload){
+    try{
+      setStatus('Preparing…');
+      await ensureReady();
+      setStatus('Starting navigation…');
+      console.log('Starting navigation with payload:', payload, 'Session ID:', currentSessionId);
+      
+      // Clear any pending audio to prevent overlapping
+      clearAudioQueue();
+      
+      // If no session exists, start one first
+      if(!currentSessionId) {
+        console.log('No session found, starting navigation system first...');
+        await startNavigation();
+        // Wait a moment for session to be established
+        await new Promise(resolve => setTimeout(resolve, 500));
+        console.log('After startNavigation, currentSessionId:', currentSessionId);
+      }
+      
+      // Add session ID and current location to headers/payload
+      const headers = {'Content-Type': 'application/json'};
+      if(currentSessionId) {
+        headers['X-Client-ID'] = currentSessionId;
+      }
+      
+      // Include current location in payload to ensure backend has it
+      if(meMarker) {
+        payload.current_lat = meMarker.getLatLng().lat;
+        payload.current_lng = meMarker.getLatLng().lng;
+        console.log('Including current location in navigate request:', payload.current_lat, payload.current_lng);
+      } else {
+        console.warn('⚠️ No current location marker - navigation may fail');
+      }
+      
+      const r=await fetch('/api/google/navigate',{
+        method:'POST',
+        headers: headers,
+        body:JSON.stringify(payload),
+        credentials:'include'
+      });
+      const data=await r.json();
+      console.log('Navigation response:', data);
+      
+      if(!data.success){setStatus('Start failed: '+(data.message||''));return}
+      setStatus('Navigation started');
+      await speakText('Navigation started successfully');
+      
+      // Immediately get and display the first instruction (no delay)
+      setTimeout(async () => {
+        try {
+          console.log('🎯 Fetching FIRST unified instruction after navigation start...');
+          await updateUnifiedInstruction(); // Call immediately
+          console.log('✅ First unified instruction updated');
+        } catch (e) {
+          console.log('❌ Error getting first unified instruction:', e);
+        }
+      }, 500); // Just 500ms delay to let navigation initialize
+      
+      // Keep the results visible - don't hide them
+      // The navigation instructions are now always visible at the top
+      
+      if(pollTimer)clearInterval(pollTimer); if(instrTimer)clearInterval(instrTimer);
+        // Use single consolidated timer for better performance
+        pollTimer=setInterval(consolidatedUpdate,8000);  // Single timer every 8 seconds
+        
+        // Start unified instruction timer - update every 10 seconds
+        unifiedTimer=setInterval(updateUnifiedInstruction,10000);  // Unified instruction every 10 seconds
+        
+        // Start real-time location tracking
+        startLocationTracking();
+      
+      console.log('Timers started - pollTimer:', pollTimer, 'instrTimer:', instrTimer);
+      
+      // Wait a moment for navigation to initialize, then start polling
+      setTimeout(() => {
+        console.log('Starting instruction polling...');
+        // Use the consolidated update function instead of separate calls
+        consolidatedUpdate();
+        // Also start unified instruction updates
+        updateUnifiedInstruction();
+      }, 1000);
+    }catch(e){
+      console.error('Navigation start error:', e);
+      setStatus('Start error: '+e.message);
+    }
+  }
+
+  // Continuous location tracking (always active)
+  // Track last accepted location to filter GPS jitter
+  let lastAcceptedLocation = null;
+  const MIN_MOVEMENT_METERS = 8; // Only update if moved more than 8 meters (filters GPS drift)
+
+  function startContinuousLocationTracking(){
+    console.log('📍 [LOCATION] Starting continuous location tracking...');
+    
+    // Stop any existing watcher
+    if(locationWatcher){
+      navigator.geolocation.clearWatch(locationWatcher);
+    }
+    
+    // Start watching position with high accuracy
+    locationWatcher = navigator.geolocation.watchPosition(
+      async (position) => {
+        const {latitude, longitude, accuracy, heading, speed} = position.coords;
+        
+        // Calculate distance from last accepted location
+        let distanceMoved = 0;
+        if(lastAcceptedLocation) {
+          distanceMoved = Math.sqrt(
+            Math.pow((latitude - lastAcceptedLocation.lat) * 111320, 2) + 
+            Math.pow((longitude - lastAcceptedLocation.lng) * 111320 * Math.cos(latitude * Math.PI / 180), 2)
+          );
+        }
+        
+        // FILTER GPS JITTER: Only update if moved significantly OR accuracy improved significantly
+        const isFirstLocation = !lastAcceptedLocation;
+        const movedEnough = distanceMoved >= MIN_MOVEMENT_METERS;
+        const accuracyGood = accuracy <= 20; // Good GPS signal
+        
+        if(!isFirstLocation && !movedEnough) {
+          console.log(`📍 [LOCATION] Ignoring GPS jitter: moved only ${distanceMoved.toFixed(1)}m (threshold: ${MIN_MOVEMENT_METERS}m)`);
+          return; // Ignore this update - GPS drift
+        }
+        
+        console.log(`📍 [LOCATION] ✅ ACCEPTED: [${latitude.toFixed(6)}, ${longitude.toFixed(6)}] ±${Math.round(accuracy)}m, moved: ${distanceMoved.toFixed(1)}m`);
+        
+        // Save this as last accepted location
+        lastAcceptedLocation = {lat: latitude, lng: longitude};
+        
+        // Update backend with new location
+        try {
+          await fetch('/api/location',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({latitude, longitude}),
+            credentials:'include'
+          });
+        } catch(e) {
+          console.warn('Failed to update backend location:', e);
+        }
+        
+        // Update or create marker on map
+        if(meMarker){
+          const oldPos = meMarker.getLatLng();
+          meMarker.setLatLng([latitude, longitude]);
+          
+          console.log(`📍 [LOCATION] 🚶 Moved: ${distanceMoved.toFixed(1)}m`);
+        } else {
+          // Create marker if it doesn't exist
+          meMarker=L.circleMarker([latitude,longitude],{
+            radius:10,
+            color:'#ffffff',
+            fillColor:'#2e7dd7',
+            fillOpacity:1,
+            weight:3
+          }).addTo(map).bindPopup('You are here');
+          map.setView([latitude, longitude], 15);
+          console.log('📍 [LOCATION] Initial marker created');
+        }
+        
+        // Show speed if moving
+        if(speed !== null && speed > 0.5) {
+          console.log(`🚶 [LOCATION] Speed: ${(speed * 3.6).toFixed(1)} km/h`);
+        }
+      },
+      (error) => {
+        console.error('📍 [LOCATION] Error:', error.message);
+        if(error.code === error.PERMISSION_DENIED){
+          setStatus('⚠️ Location permission needed');
+        }
+      },
+      {
+        enableHighAccuracy: false,  // Use network location (faster, less battery)
+        timeout: 90000,             // 90 second timeout (very generous)
+        maximumAge: 30000           // Allow 30s cached position
+      }
+    );
+    
+    console.log('✅ [LOCATION] Continuous tracking started');
+  }
+
+  // Real-time location tracking (for navigation)
+  function startLocationTracking(){
+    console.log('📍 [LOCATION] Starting real-time location tracking...');
+    
+    // Stop any existing watcher
+    if(locationWatcher){
+      navigator.geolocation.clearWatch(locationWatcher);
+    }
+    
+    // Start watching position with high accuracy
+    locationWatcher = navigator.geolocation.watchPosition(
+      async (position) => {
+        const {latitude, longitude, accuracy, heading, speed} = position.coords;
+        console.log(`📍 [LOCATION] Position update: [${latitude.toFixed(6)}, ${longitude.toFixed(6)}] ±${Math.round(accuracy)}m`);
+        
+        // Update backend with new location
+        try {
+          await fetch('/api/location',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({latitude, longitude}),
+            credentials:'include'
+          });
+        } catch(e) {
+          console.warn('Failed to update backend location:', e);
+        }
+        
+        // Update marker on map
+        if(meMarker){
+          const oldPos = meMarker.getLatLng();
+          meMarker.setLatLng([latitude, longitude]);
+          
+          // Optionally center map on user if they moved significantly
+          const distance = map.distance(oldPos, [latitude, longitude]);
+          if(distance > 20) { // Moved more than 20 meters
+            console.log(`📍 [LOCATION] Significant movement: ${Math.round(distance)}m`);
+            // Smoothly pan to new position
+            map.panTo([latitude, longitude], {animate: true, duration: 1.0});
+          }
+        } else {
+          // Create marker if it doesn't exist
+          meMarker=L.circleMarker([latitude,longitude],{
+            radius:10,
+            color:'#ffffff',
+            fillColor:'#2e7dd7',
+            fillOpacity:1,
+            weight:3
+          }).addTo(map).bindPopup('You are here');
+          map.setView([latitude, longitude], 16);
+        }
+        
+        // Add direction indicator if heading is available
+        if(heading !== null && heading !== undefined) {
+          console.log(`🧭 [LOCATION] Heading: ${Math.round(heading)}°`);
+          // Could add an arrow to show direction
+        }
+        
+        // Show speed if moving
+        if(speed !== null && speed > 0.5) { // Moving faster than 0.5 m/s
+          console.log(`🚶 [LOCATION] Speed: ${(speed * 3.6).toFixed(1)} km/h`);
+        }
+      },
+      (error) => {
+        console.error('📍 [LOCATION] Error:', error.message);
+        if(error.code === error.PERMISSION_DENIED){
+          setStatus('Location permission denied');
+        } else if(error.code === error.POSITION_UNAVAILABLE){
+          setStatus('Location unavailable');
+        } else if(error.code === error.TIMEOUT){
+          console.warn('Location timeout, will retry...');
+        }
+      },
+      {
+        enableHighAccuracy: false,  // Use network location (faster, less battery)
+        timeout: 90000,             // 90 second timeout (very generous)
+        maximumAge: 30000           // Allow 30s cached position to reduce timeouts
+      }
+    );
+    
+    console.log('✅ [LOCATION] Location watcher started, ID:', locationWatcher);
+  }
+  
+  function stopLocationTracking(){
+    if(locationWatcher){
+      console.log('🛑 [LOCATION] Stopping location tracking...');
+      navigator.geolocation.clearWatch(locationWatcher);
+      locationWatcher = null;
+      console.log('✅ [LOCATION] Location tracking stopped');
+    }
+  }
+
+  async function refreshRoute(){
+    try{
+      console.log('🗺️ [ROUTE] Fetching route data...');
+      const r=await fetch('/api/navigation/route',{credentials:'include'});
+      const data=await r.json();
+      console.log('🗺️ [ROUTE] Response received:', {
+        success: data.success,
+        hasRoute: !!data.route,
+        hasGeometry: !!data.route?.geometry,
+        coordCount: data.route?.geometry?.coordinates?.length || 0
+      });
+      
+      if(!(data&&data.success&&data.route)){
+        console.warn('⚠️ [ROUTE] No valid route data available');
+        console.log('Full response:', data);
+        return;
+      }
+      
+      const g=data.route.geometry;
+      if(g&&g.coordinates&&g.coordinates.length>0){
+        console.log(`✅ [ROUTE] Processing ${g.coordinates.length} coordinates`);
+        
+        // Clear existing route
+        if(routeLine){
+          console.log('🗺️ [ROUTE] Removing old route line');
+          map.removeLayer(routeLine);
+          routeLine = null;
+        }
+        
+        // Convert coordinates from [lng, lat] to [lat, lng] for Leaflet
+        const coords=g.coordinates.map(c=>[c[1],c[0]]);
+        console.log(`🗺️ [ROUTE] First coord: [${coords[0]}], Last coord: [${coords[coords.length-1]}]`);
+        
+        // Create route line with MAXIMUM visibility
+        routeLine=L.polyline(coords,{
+          color:'#00FF00',      // Bright neon green for maximum visibility
+          weight:12,             // Much thicker line
+          opacity:1.0,           // Full opacity
+          lineJoin:'round',
+          lineCap:'round',
+          zIndex: 1000          // On top of everything
+        }).addTo(map);
+        
+        // Bring route line to front
+        routeLine.bringToFront();
+        
+        console.log('✅ [ROUTE] Route line added to map with maximum visibility');
+        
+        // Add start marker
+        const startCoord = coords[0];
+        if(meMarker){
+          map.removeLayer(meMarker);
+        }
+        meMarker=L.circleMarker(startCoord,{
+          radius:8,
+          color:'#2e7dd7',
+          fillColor:'#2e7dd7',
+          fillOpacity:1
+        }).addTo(map).bindPopup('Start: You are here');
+        console.log('🎯 [ROUTE] Start marker added');
+        
+        // Add destination marker
+        const endCoord = coords[coords.length-1];
+        if(destMarker){
+          map.removeLayer(destMarker);
+        }
+        destMarker=L.marker(endCoord,{
+          icon: L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+          })
+        }).addTo(map).bindPopup('Destination');
+        console.log('🎯 [ROUTE] Destination marker added');
+        
+        // Clear old instruction markers
+        instructionMarkers.forEach(m=>{try{map.removeLayer(m)}catch(e){console.warn('Failed to remove marker:', e)}}); 
+        instructionMarkers=[];
+        
+        // Add waypoint markers for each instruction
+        if(data.route.instructions&&data.route.instructions.length>0){
+          console.log(`📍 [ROUTE] Adding ${data.route.instructions.length} waypoint markers`);
+          data.route.instructions.forEach((step,idx)=>{
+            const ml=step.maneuver_location;
+            let ll=null;
+            
+            // Try to get location from maneuver_location first
+            if(ml&&ml.lat&&ml.lng) {
+              ll=[ml.lat,ml.lng];
+            }
+            // Otherwise use way_points indices
+            else if(step.way_points&&step.way_points.length>=2){
+              const endIdx=step.way_points[1];
+              if(g.coordinates[endIdx]){
+                const c=g.coordinates[endIdx];
+                ll=[c[1],c[0]];
+              }
+            }
+            
+            if(ll){
+              const cm=L.circleMarker(ll,{
+                radius:7,
+                color:'#FF9800',
+                fillColor:'#FF9800',
+                fillOpacity:1,
+                weight:2,
+                fillRule:'evenodd'
+              }).bindTooltip(`Step ${idx+1}: ${step.instruction||'Turn'}`, {
+                permanent: false,
+                direction: 'top'
+              });
+              
+              instructionMarkers.push(cm);
+              if(showMarkers){
+                cm.addTo(map);
+              }
+            }
+          });
+          console.log(`✅ [ROUTE] ${instructionMarkers.length} waypoint markers added`);
+        } else {
+          console.log('ℹ️ [ROUTE] No instructions found for waypoints');
+        }
+        
+        // Zoom to fit the entire route
+        console.log('🔍 [ROUTE] Auto-zooming to show full route');
+        setTimeout(() => {
+          if(routeLine){
+            map.fitBounds(routeLine.getBounds(),{
+              padding:[50,50],
+              maxZoom:16
+            });
+            console.log('✅ [ROUTE] Map zoomed to route bounds');
+          }
+        }, 100);
+        
+      } else {
+        console.error('❌ [ROUTE] No geometry coordinates available');
+        console.log('Geometry object:', g);
+      }
+    }catch(e){
+      console.error('❌ [ROUTE] Error in route display:', e);
+      console.error('Stack trace:', e.stack);
+    }
+  }
+
+  let lastInstructionText = '';
+  let lastTTSInstruction = '';
+  let ttsCooldown = false;
+
+  async function fetchInstruction(){
+    try{
+      console.log('Fetching instruction...', 'Session ID:', currentSessionId);
+      console.log('Current timers - pollTimer:', pollTimer, 'instrTimer:', instrTimer);
+      
+      // Add session ID as header if available
+      const headers = {'Content-Type': 'application/json'};
+      if(currentSessionId) {
+        headers['X-Client-ID'] = currentSessionId;
+      }
+      
+      console.log('Making API call to /api/navigation/current-instruction');
+      const r=await fetch('/api/navigation/current-instruction',{
+        credentials:'include',
+        headers: headers
+      });
+      const data=await r.json();
+      console.log('Instruction response:', data);
+      console.log('Headers sent:', headers);
+      console.log('Request URL:', r.url);
+      console.log('Response status:', r.status);
+      
+      if(data&&data.success&&data.instruction){
+        const t=data.instruction.speech_instruction||data.instruction.instruction||'';
+        document.getElementById('unifiedInstruction').textContent=t;
+        document.getElementById('unifiedDistance').textContent=data.instruction.distance? `${Math.round(data.instruction.distance)}m`:'-';
+        document.getElementById('unifiedTime').textContent=data.instruction.duration? `${Math.round(data.instruction.duration/60)}min`:'-';
+        
+        // Auto-speak new instructions with aggressive debouncing
+        if(t && t !== '-' && t !== lastInstructionText) {
+          lastInstructionText = t;
+          
+          // Only speak if it's a different instruction and not in cooldown
+          if(t !== lastTTSInstruction && !ttsCooldown) {
+            lastTTSInstruction = t;
+            ttsCooldown = true;
+            await speakText(t);
+            
+            // Reset cooldown after 5 seconds (longer to prevent overlapping)
+            setTimeout(() => {
+              ttsCooldown = false;
+            }, 5000);
+          }
+        }
+      } else if(data && !data.success) {
+        // Show the error message in the instruction area
+        document.getElementById('unifiedInstruction').textContent = data.message || 'No instruction';
+        document.getElementById('unifiedDistance').textContent = '-';
+        document.getElementById('unifiedTime').textContent = '-';
+        
+        // If navigation system not initialized, try to recover
+        if(data.message && data.message.includes('Navigation system not initialized')) {
+          console.log('Navigation system lost, attempting recovery...');
+          await recoverNavigationSession();
+        }
+        // If it's "No active navigation", try to restart navigation system
+        else if(data.message && data.message.includes('No active navigation')) {
+          console.log('Navigation lost, attempting to restart...');
+          // Don't auto-restart, just show the issue
+        }
+      }
+    }catch(e){
+      console.log('Instruction fetch error:', e);
+      document.getElementById('unifiedInstruction').textContent = 'Error fetching instruction';
+    }
+  }
+
+  async function recoverNavigationSession() {
+    try {
+      console.log('Attempting to recover navigation session...');
+      
+      // First, try to restart the navigation system
+      const startR = await fetch('/api/start', {method: 'POST', credentials: 'include'});
+      const startData = await startR.json();
+      console.log('Recovery start response:', startData);
+      
+      if(startData.success && startData.session_id) {
+        currentSessionId = startData.session_id;
+        console.log('Session recovered, new session ID:', currentSessionId);
+        await speakText('Navigation system recovered');
+        
+        // Try to get status to verify recovery
+        const statusR = await fetch('/api/status', {credentials: 'include'});
+        const statusData = await statusR.json();
+        console.log('Recovery status check:', statusData);
+        
+        return true;
+      } else {
+        console.log('Recovery failed:', startData.message);
+        await speakText('Navigation system recovery failed');
+        return false;
+      }
+    } catch (e) {
+      console.error('Recovery error:', e);
+      await speakText('Navigation system recovery error');
+      return false;
+    }
+  }
+
+  // Consolidated update function to reduce API calls
+  async function consolidatedUpdate() {
+    try {
+      console.log('Consolidated update running...');
+      
+      // Only make API calls if we have a session
+      if (!currentSessionId) {
+        console.log('No session ID, skipping update');
+        return;
+      }
+      
+      // Fetch unified-instruction and route in parallel to reduce total time
+      const [instructionResponse, routeResponse] = await Promise.allSettled([
+        fetch('/api/navigation/unified-instruction', {
+          credentials: 'include',
+          headers: {'X-Client-ID': currentSessionId}
+        }),
+        fetch('/api/navigation/route', {
+          credentials: 'include',
+          headers: {'X-Client-ID': currentSessionId}
+        })
+      ]);
+      
+      // Process unified instruction response
+      if (instructionResponse.status === 'fulfilled') {
+        const instructionData = await instructionResponse.value.json();
+        if (instructionData && instructionData.success && instructionData.instruction) {
+          const t = instructionData.instruction || '';
+          document.getElementById('unifiedInstruction').textContent = t;
+          document.getElementById('unifiedDistance').textContent = instructionData.distance ? `${Math.round(instructionData.distance)}m` : '-';
+          document.getElementById('unifiedTime').textContent = instructionData.duration ? `${Math.round(instructionData.duration/60)}min` : '-';
+          
+          // Auto-speak new instructions with debouncing
+          console.log('Instruction received:', t);
+          console.log('Last instruction text:', lastInstructionText);
+          console.log('Last TTS instruction:', lastTTSInstruction);
+          console.log('TTS cooldown:', ttsCooldown);
+          
+          // Always speak the instruction if it's different from what we last spoke
+          if (t && t !== '-' && t !== lastTTSInstruction) {
+            console.log('New instruction detected, speaking immediately...');
+            lastInstructionText = t;
+            lastTTSInstruction = t;
+            ttsCooldown = true;
+            await speakText(t);
+            setTimeout(() => { ttsCooldown = false; }, 3000); // Reduced cooldown
+          } else if (t && t !== '-' && lastInstructionText === '') {
+            // Special case: first instruction should always be spoken
+            console.log('First instruction detected, speaking...');
+            lastInstructionText = t;
+            lastTTSInstruction = t;
+            ttsCooldown = true;
+            await speakText(t);
+            setTimeout(() => { ttsCooldown = false; }, 3000);
+          } else {
+            console.log('Skipping TTS - duplicate instruction or empty');
+            console.log('t:', t);
+            console.log('lastTTSInstruction:', lastTTSInstruction);
+            console.log('t !== lastTTSInstruction:', t !== lastTTSInstruction);
+          }
+        } else if (instructionData && !instructionData.success) {
+          if (instructionData.message && instructionData.message.includes('Navigation system not initialized')) {
+            console.log('Navigation system lost during update, attempting recovery...');
+            await recoverNavigationSession();
+          }
+        }
+      }
+      
+      // Process route response
+      if (routeResponse.status === 'fulfilled') {
+        const routeData = await routeResponse.value.json();
+        if (routeData && routeData.success && routeData.route) {
+          // Update route display if needed
+          console.log('Route updated successfully');
+        }
+      }
+      
+    } catch (e) {
+      console.error('Consolidated update error:', e);
+    }
+  }
+
+  async function updateUnifiedInstruction() {
+    try {
+      console.log('Updating unified instruction...');
+      
+      // Only make API calls if we have a session
+      if (!currentSessionId) {
+        console.log('No session ID, skipping unified instruction');
+        return;
+      }
+      
+      const response = await fetch('/api/navigation/unified-instruction', {
+        credentials: 'include',
+        headers: {'X-Client-ID': currentSessionId}
+      });
+      
+      const data = await response.json();
+      console.log('Unified instruction response:', data);
+      
+      if (data && data.success && data.instruction) {
+        // Update the unified instruction display
+        document.getElementById('unifiedInstruction').textContent = data.instruction;
+        document.getElementById('unifiedDistance').textContent = data.distance ? `${Math.round(data.distance)}m` : '-';
+        document.getElementById('unifiedTime').textContent = data.duration ? `${Math.round(data.duration/60)}min` : '-';
+        document.getElementById('instructionContext').textContent = data.context || '-';
+        
+        // Speak the instruction if it's different from what we last spoke
+        if (data.instruction && data.instruction !== '-' && data.instruction !== lastTTSInstruction) {
+          console.log('Speaking unified instruction:', data.instruction);
+          lastTTSInstruction = data.instruction;
+          ttsCooldown = true;
+          await speakText(data.instruction);
+          setTimeout(() => { ttsCooldown = false; }, 3000);
+        }
+      }
+      
+    } catch (e) {
+      console.error('Unified instruction update error:', e);
+    }
+  }
+
+  function centerOnMe(){ if(meMarker) map.setView(meMarker.getLatLng(), 16); }
+  function zoomToRoute(){ 
+    console.log('zoomToRoute called, routeLine exists:', !!routeLine);
+    if(routeLine) {
+      console.log('Fitting bounds to route');
+      map.fitBounds(routeLine.getBounds(),{padding:[20,20]}); 
+    } else {
+      console.log('No route line found, trying to fetch route...');
+      // Try to fetch and display route if not already displayed
+      fetchRouteAndDisplay();
+    }
+  }
+  function toggleInstructionMarkers(){ showMarkers=!showMarkers; instructionMarkers.forEach(m=>{try{ if(showMarkers) m.addTo(map); else map.removeLayer(m);}catch{}}) }
+  
+  async function fetchRouteAndDisplay() {
+    console.log('fetchRouteAndDisplay called, calling refreshRoute...');
+    await refreshRoute();
+  }
+  
+  // Make functions available globally for testing
+  window.testRouteDisplay = fetchRouteAndDisplay;
+  window.testZoomToRoute = zoomToRoute;
+  window.refreshRoute = refreshRoute;
+  async function stopNav(){ 
+    try{ 
+      await fetch('/api/stop',{method:'POST'}); 
+      setStatus('Stopped'); 
+      
+      // Clear audio queue and stop current audio
+      clearAudioQueue();
+      
+      await speakText('Navigation stopped');
+      
+      // Clear timers
+      if(pollTimer) clearInterval(pollTimer);
+      if(instrTimer) clearInterval(instrTimer);
+      if(unifiedTimer) clearInterval(unifiedTimer);
+      
+      // Stop location tracking
+      stopLocationTracking();
+      
+      // Results remain visible - no need to clear them
+      
+      // Clear instruction display
+      document.getElementById('unifiedInstruction').textContent = '-';
+      document.getElementById('unifiedDistance').textContent = '-';
+      document.getElementById('unifiedTime').textContent = '-';
+      
+      // Clear route line
+      if(routeLine) { map.removeLayer(routeLine); routeLine = null; }
+      
+      // Clear instruction markers
+      instructionMarkers.forEach(marker => {
+        try { map.removeLayer(marker); } catch {}
+      });
+      instructionMarkers = [];
+      
+    }catch{} 
+  }
+
+  // TTS Functions
+  // Audio management variables
+  let currentAudio = null;
+  let audioQueue = [];
+  let isPlaying = false;
+  
+  // Function to clear audio queue and stop current audio
+  function clearAudioQueue() {
+    audioQueue = [];
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      currentAudio = null;
+    }
+    isPlaying = false;
+    console.log('Audio queue cleared');
+  }
+
+  async function speakText(text) {
+    try {
+      console.log('speakText called with:', text);
+      if (!text || text.trim() === '') {
+        console.log('Empty text, returning');
+        return;
+      }
+      
+      // Prevent duplicate messages
+      if (text === lastTTSInstruction && ttsCooldown) {
+        console.log('Skipping duplicate TTS:', text);
+        return;
+      }
+      
+      console.log('Adding to audio queue:', text);
+      // Add to queue
+      audioQueue.push(text);
+      lastTTSInstruction = text;
+      ttsCooldown = true;
+      
+      // Reset cooldown after 2 seconds
+      setTimeout(() => {
+        ttsCooldown = false;
+      }, 2000);
+      
+      // If already playing, just queue it
+      if (isPlaying) {
+        console.log('Already playing, queued');
+        return;
+      }
+      
+      console.log('Starting audio queue processing');
+      // Start processing queue
+      await processAudioQueue();
+    } catch (e) {
+      console.log('TTS error:', e);
+    }
+  }
+
+  async function processAudioQueue() {
+    console.log('processAudioQueue called, queue length:', audioQueue.length);
+    if (audioQueue.length === 0) {
+      isPlaying = false;
+      console.log('Audio queue empty, stopping');
+      return;
+    }
+    
+    isPlaying = true;
+    const text = audioQueue.shift();
+    console.log('Processing audio for text:', text);
+    
+    try {
+      // Stop any currently playing audio immediately
+      if (currentAudio) {
+        console.log('Stopping current audio');
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+      }
+      
+      // Wait a moment to ensure previous audio is stopped
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      console.log('Making TTS API request for:', text);
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text }),
+        credentials: 'include'
+      });
+      
+      console.log('TTS API response status:', response.status);
+      if (response.ok) {
+        console.log('TTS API success, creating audio');
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        currentAudio = new Audio(audioUrl);
+        
+        currentAudio.onended = () => {
+          console.log('Audio playback ended');
+          URL.revokeObjectURL(audioUrl);
+          currentAudio = null;
+          // Process next in queue with longer delay
+          setTimeout(processAudioQueue, 500); // Longer delay between messages
+        };
+        
+        currentAudio.onerror = (e) => {
+          console.log('Audio playback error:', e);
+          URL.revokeObjectURL(audioUrl);
+          currentAudio = null;
+          // Process next in queue even on error
+          setTimeout(processAudioQueue, 500);
+        };
+        
+        console.log('Starting audio playback');
+        await currentAudio.play();
+        console.log('Audio playback started');
+      } else {
+        console.log('TTS API error:', response.status);
+        const errorText = await response.text();
+        console.log('TTS API error response:', errorText);
+        // Process next in queue even on error
+        setTimeout(processAudioQueue, 500);
+      }
+    } catch (e) {
+      console.log('TTS playback error:', e);
+      // Process next in queue even on error
+      setTimeout(processAudioQueue, 500);
+    }
+  }
+
+async function speakUnifiedInstruction() {
+  const instruction = document.getElementById('unifiedInstruction').textContent;
+  console.log('speakUnifiedInstruction called, instruction:', instruction);
+  if (instruction && instruction !== '-') {
+    console.log('Speaking unified instruction:', instruction);
+    await speakText(instruction);
+  } else {
+    console.log('No instruction available, speaking fallback message');
+    await speakText('No current navigation instruction available');
+  }
+}
+
+  async function speakSearchResult(place) {
+    const text = `Found ${place.name}. ${place.address}. Rating ${place.rating || 'not available'}. Distance ${place.distance_meters ? place.distance_meters + ' meters' : 'unknown'}.`;
+    await speakText(text);
+  }
+
+  async function checkNavigationStatus() {
+    try {
+      setStatus('Checking navigation status...');
+      
+      // First check if we have a session
+      const startR = await fetch('/api/start', {method: 'POST', credentials: 'include'});
+      const startData = await startR.json();
+      console.log('Session check:', startData);
+      
+      // Check current instruction
+      const r = await fetch('/api/navigation/current-instruction', {credentials: 'include'});
+      const data = await r.json();
+      console.log('Instruction check:', data);
+      
+      if (data && data.success) {
+        setStatus('Navigation is active - ' + (data.instruction?.speech_instruction || 'No instruction'));
+        await speakText('Navigation is active');
+      } else {
+        setStatus('Navigation status: ' + (data.message || 'Unknown'));
+        await speakText('Navigation is not active: ' + (data.message || 'Unknown error'));
+      }
+      
+      // Also check route
+      const routeR = await fetch('/api/navigation/route', {credentials: 'include'});
+      const routeData = await routeR.json();
+      console.log('Route check:', routeData);
+      
+      if (routeData && routeData.success) {
+        console.log('Route is available:', routeData.route);
+      } else {
+        console.log('No route available:', routeData.message);
+      }
+      
+    } catch (e) {
+      setStatus('Status check error: ' + e.message);
+      await speakText('Error checking navigation status');
+    }
+  }
+// ===== Photo Capture Vision =====
+let mediaStream=null, photoCanvas=null, photoCtx=null;
+
+async function startCamera(){
+  try{
+    console.log('Starting camera...');
+    
+    // Check if getUserMedia is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const isHTTP = window.location.protocol === 'http:';
+      const isNotLocalhost = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
+      
+      if (isHTTP && isNotLocalhost) {
+        // HTTPS required for camera on non-localhost
+        const httpsUrl = window.location.href.replace('http://', 'https://');
+        setStatus('❌ Camera requires HTTPS. Redirecting...');
+        await speakText('Camera requires secure connection. Please use HTTPS or localhost.');
+        
+        // Show user-friendly message
+        alert(`Camera access requires HTTPS!\n\nCurrent URL: ${window.location.href}\n\nOptions:\n1. Access via HTTPS (if SSL configured)\n2. Test on localhost\n3. Contact admin to setup SSL certificate`);
+        
+        console.error('Camera unavailable: HTTPS required for non-localhost domains');
+        return;
+      } else {
+        // Other browser compatibility issue
+        setStatus('❌ Camera not supported in this browser');
+        await speakText('Camera not supported in this browser. Please use a modern browser like Chrome or Firefox.');
+        alert('Your browser does not support camera access.\n\nPlease use:\n- Chrome\n- Firefox\n- Safari (on iOS/macOS)\n- Edge');
+        return;
+      }
+    }
+    
+    setStatus('Enabling vision system...');
+    
+    // Enable vision system first
+    try {
+      const visionResponse = await fetch('/api/vision/toggle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getSessionHeaders()
+        },
+        body: JSON.stringify({enabled: true}),
+        credentials: 'include'
+      });
+      const visionData = await visionResponse.json();
+      console.log('Vision toggle response:', visionData);
+    } catch(visionErr) {
+      console.warn('Vision toggle failed:', visionErr);
+      // Continue anyway - camera might still work
+    }
+    
+    setStatus('Requesting camera access...');
+    
+    // Request camera access
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 640 },
+        height: { ideal: 480 }
+      }, 
+      audio: false
+    });
+    
+    console.log('Camera permission granted');
+    
+    const v=document.getElementById('visionPreview'); 
+    v.srcObject=mediaStream; 
+    v.style.display='block';
+    
+    // Setup photo canvas
+    photoCanvas=document.getElementById('photoCanvas');
+    photoCtx=photoCanvas.getContext('2d');
+    photoCanvas.width=640;
+    photoCanvas.height=480;
+    
+    // Enable capture button and live vision button
+    const captureBtn = document.getElementById('captureBtn');
+    if(captureBtn) captureBtn.disabled=false;
+    
+    const liveBtn = document.getElementById('liveVisionBtn');
+    if(liveBtn) {
+      liveBtn.disabled=false;
+      liveBtn.style.background='#FF9800'; // Orange when ready
+      liveBtn.textContent='👁️ Live Monitor OFF (Click to Enable)';
+      console.log('✅ Live Vision button enabled - camera ready');
+    }
+    
+    // Show vision results panel
+    const visionResults = document.getElementById('visionResults');
+    if(visionResults) visionResults.style.display='block';
+    
+    setStatus('Camera ready');
+    console.log('Camera started successfully');
+    await speakText('Camera ready. Point at obstacles and click Take Photo.');
+  }catch(e){
+    console.error('Camera start failed:', e);
+    
+    // Provide specific error messages
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      setStatus('❌ Camera permission denied');
+      await speakText('Camera permission denied. Please allow camera access in your browser settings.');
+      alert('Camera Permission Denied\n\nPlease:\n1. Click the camera icon in address bar\n2. Allow camera access\n3. Try again');
+    } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
+      setStatus('❌ No camera found');
+      await speakText('No camera detected on this device.');
+      alert('No camera found on this device.');
+    } else if (e.name === 'NotReadableError' || e.name === 'TrackStartError') {
+      setStatus('❌ Camera in use by another app');
+      await speakText('Camera is already in use by another application.');
+      alert('Camera is being used by another application.\n\nPlease close other apps using the camera and try again.');
+    } else {
+      setStatus('❌ Camera error: ' + e.message);
+      await speakText('Camera access failed. Please check browser settings.');
+      alert(`Camera Error: ${e.message}\n\nPlease check:\n- Browser permissions\n- Camera is not in use\n- Using HTTPS or localhost`);
+    }
+  }
+}
+
+async function capturePhoto(){
+  try{
+    console.log('Capturing photo...');
+    const v=document.getElementById('visionPreview');
+    if(!v.videoWidth) {
+      console.log('Video not ready');
+      return;
+    }
+    
+    // Draw current video frame to canvas
+    photoCtx.drawImage(v,0,0,640,480);
+    
+    // Show photo and hide video
+    v.style.display='none';
+    photoCanvas.style.display='block';
+    
+    // Show status
+    const status=document.getElementById('photoStatus');
+    status.style.display='block';
+    status.textContent='📸 Photo captured! Analyzing...';
+    
+    // Convert canvas to blob
+    const blob=await new Promise(r=>photoCanvas.toBlob(r,'image/jpeg',0.8));
+    
+    // Send to API
+    const fd=new FormData();
+    fd.append('image', blob, 'photo.jpg');
+    
+    // Add context
+    if (!currentSessionId) {
+      const st=await (await fetch('/api/status',{credentials:'include'})).json().catch(()=>({}));
+      fd.append('context', JSON.stringify({ts:new Date().toISOString(), status: st}));
+    } else {
+      fd.append('context', JSON.stringify({ts:new Date().toISOString(), session_id: currentSessionId}));
+    }
+    
+    console.log('Sending photo to API...');
+    const response = await fetch('/api/vision/frame',{method:'POST',body:fd,credentials:'include'});
+    console.log('Photo analysis response status:', response.status);
+    
+    if(response.ok) {
+      const data = await response.json();
+      console.log('Photo analysis response data:', data);
+      
+      if(data.success) {
+        // Display vision analysis results
+        displayVisionResults(data);
+        status.textContent='✅ Analysis complete!';
+        
+        // Trigger unified instruction update to get combined guidance
+        setTimeout(() => {
+          updateUnifiedInstruction();
+        }, 500);
+      } else {
+        status.textContent='❌ Analysis failed: ' + (data.message || 'Unknown error');
+        console.log('Photo analysis failed:', data.message);
+      }
+    } else {
+      status.textContent='❌ API error: ' + response.status;
+      console.log('Photo analysis API error:', response.status, response.statusText);
+    }
+    
+    // Hide status after 3 seconds
+    setTimeout(() => {
+      status.style.display='none';
+    }, 3000);
+    
+  }catch(e){
+    console.error('Photo capture failed:', e);
+    document.getElementById('photoStatus').textContent='❌ Photo capture failed';
+  }
+}
+
+// Live Vision Monitoring
+async function toggleLiveVision() {
+  try {
+    const btn = document.getElementById('liveVisionBtn');
+    const v = document.getElementById('visionPreview');
+    
+    // Check if camera is started
+    if (!v || !v.videoWidth) {
+      alert('⚠️ Please START THE CAMERA first!\n\n1. Click "📷 Start Camera"\n2. Allow camera permission\n3. Then click "👁️ Live Monitor"');
+      setStatus('❌ Camera not started - Click "📷 Start Camera" first');
+      return;
+    }
+    
+    liveVisionEnabled = !liveVisionEnabled;
+    
+    if (liveVisionEnabled) {
+      // START live monitoring
+      console.log('👁️ [LIVE VISION] Starting continuous monitoring...');
+      btn.textContent = '👁️ Live Monitor ON';
+      btn.style.background = '#4CAF50';
+      setStatus('👁️ Live vision monitoring active');
+      
+      // Start capturing photos at intervals
+      liveVisionTimer = setInterval(async () => {
+        const now = Date.now();
+        if (now - lastCaptureTime >= LIVE_VISION_INTERVAL) {
+          console.log('👁️ [LIVE VISION] Auto-capturing frame...');
+          lastCaptureTime = now;
+          await capturePhotoSilent(); // Silent capture without UI feedback
+        }
+      }, LIVE_VISION_INTERVAL);
+      
+      // Capture first frame immediately
+      await capturePhotoSilent();
+      
+    } else {
+      // STOP live monitoring
+      console.log('👁️ [LIVE VISION] Stopping continuous monitoring');
+      btn.textContent = '👁️ Live Monitor OFF';
+      btn.style.background = '#FF9800';
+      setStatus('Live vision monitoring stopped');
+      
+      if (liveVisionTimer) {
+        clearInterval(liveVisionTimer);
+        liveVisionTimer = null;
+      }
+    }
+  } catch (e) {
+    console.error('Live vision toggle error:', e);
+    setStatus('Error toggling live vision: ' + e.message);
+  }
+}
+
+// Silent photo capture for live monitoring (no UI disruption)
+async function capturePhotoSilent(){
+  try{
+    const v=document.getElementById('visionPreview');
+    if(!v.videoWidth) {
+      console.log('👁️ [LIVE VISION] Video not ready, skipping capture');
+      return;
+    }
+    
+    // Draw current video frame to canvas (silently)
+    photoCtx.drawImage(v,0,0,640,480);
+    
+    // Convert canvas to blob
+    const blob=await new Promise(r=>photoCanvas.toBlob(r,'image/jpeg',0.7)); // Lower quality for speed
+    
+    // Send to API
+    const fd=new FormData();
+    fd.append('image', blob, 'live_frame.jpg');
+    fd.append('context', JSON.stringify({
+      ts: new Date().toISOString(), 
+      session_id: currentSessionId,
+      live_monitoring: true
+    }));
+    
+    console.log('👁️ [LIVE VISION] Sending frame to API...');
+    const response = await fetch('/api/vision/frame',{method:'POST',body:fd,credentials:'include'});
+    
+    if(response.ok) {
+      const data = await response.json();
+      if(data.success) {
+        console.log('👁️ [LIVE VISION] Frame analyzed:', data.narration || 'No narration');
+        
+        // Update vision results display
+        displayVisionResults(data);
+        
+        // The unified instruction will automatically pick up this vision data
+        // on its next poll (every 2 seconds)
+      } else {
+        console.warn('👁️ [LIVE VISION] Frame analysis failed:', data.message);
+      }
+    } else if (response.status === 400) {
+      // Vision might be disabled - try to enable it
+      const errorData = await response.json().catch(() => ({}));
+      if (errorData.message === 'vision disabled') {
+        console.log('👁️ [LIVE VISION] Vision disabled, re-enabling...');
+        try {
+          await fetch('/api/vision/toggle', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...getSessionHeaders()
+            },
+            body: JSON.stringify({enabled: true}),
+            credentials: 'include'
+          });
+          console.log('👁️ [LIVE VISION] Vision re-enabled');
+        } catch(e) {
+          console.error('👁️ [LIVE VISION] Failed to re-enable vision:', e);
+        }
+      } else {
+        console.error('👁️ [LIVE VISION] 400 error:', errorData.message || 'Unknown error');
+      }
+    }
+  }catch(e){
+    console.error('👁️ [LIVE VISION] Silent capture failed:', e);
+  }
+}
+
+async function stopCamera(){
+  try{
+    console.log('Stopping camera...');
+    
+    // Stop live vision if active
+    if (liveVisionEnabled) {
+      liveVisionEnabled = false;
+      if (liveVisionTimer) {
+        clearInterval(liveVisionTimer);
+        liveVisionTimer = null;
+      }
+      const btn = document.getElementById('liveVisionBtn');
+      if (btn) {
+        btn.textContent = '👁️ Live Monitor OFF';
+        btn.style.background = '#FF9800';
+      }
+    }
+    
+    // Disable vision system
+    try {
+      await fetch('/api/vision/toggle', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: false}),
+        credentials: 'include'
+      });
+    } catch (e) {
+      console.log('Vision toggle error:', e);
+    }
+    
+    if(mediaStream){ 
+      mediaStream.getTracks().forEach(t=>t.stop()); 
+      mediaStream=null; 
+    }
+    
+    const v=document.getElementById('visionPreview'); 
+    v.srcObject=null; 
+    v.style.display='none';
+    
+    const canvas=document.getElementById('photoCanvas');
+    canvas.style.display='none';
+    
+    const status=document.getElementById('photoStatus');
+    status.style.display='none';
+    
+    // Disable capture button and live vision button
+    const captureBtn = document.getElementById('captureBtn');
+    if(captureBtn) captureBtn.disabled=true;
+    
+    const liveBtn = document.getElementById('liveVisionBtn');
+    if(liveBtn) liveBtn.disabled=true;
+    
+    // Hide vision results panel
+    const visionResults = document.getElementById('visionResults');
+    if(visionResults) visionResults.style.display='none';
+    
+    console.log('Camera stopped');
+    await speakText('Camera stopped');
+  }catch(e){
+    console.error('Camera stop failed:', e);
+  }
+}
+
+function displayVisionResults(data) {
+  // Display the vision analysis results
+  console.log('📸 [VISION] Displaying results:', data);
+  
+  const visionText = document.getElementById('visionText');
+  if(visionText) {
+    let resultText = '';
+    
+    if(data.narration) {
+      resultText += `🗣️ ${data.narration}\n`;
+    }
+    
+    if(data.hazards && data.hazards.length > 0) {
+      resultText += `⚠️ Hazards: ${data.hazards.join(', ')}\n`;
+    } else {
+      resultText += `✅ No hazards detected\n`;
+    }
+    
+    if(data.suggested_heading) {
+      resultText += `🧭 Direction: ${data.suggested_heading}\n`;
+    }
+    
+    if(data.provider) {
+      resultText += `📡 Provider: ${data.provider}`;
+    }
+    
+    visionText.textContent = resultText || 'Analysis complete';
+    console.log('✅ [VISION] Results displayed');
+  } else {
+    console.warn('⚠️ [VISION] visionText element not found');
+  }
+}
+
+async function speakVisionNarration() {
+  const visionText = document.getElementById('visionText');
+  if (visionText && visionText.textContent && visionText.textContent !== '') {
+    await speakText(visionText.textContent);
+  } else {
+    await speakText('No vision guidance available');
+  }
+}
+
+async function testNavigationAPI() {
+  console.log('=== TESTING NAVIGATION API ===');
+  console.log('Current session ID:', currentSessionId);
+  console.log('Poll timer:', pollTimer);
+  console.log('Instruction timer:', instrTimer);
+  
+  // Test manual API call
+  try {
+    console.log('Testing manual fetchInstruction...');
+    await fetchInstruction();
+  } catch (e) {
+    console.error('Manual fetchInstruction failed:', e);
+  }
+  
+  try {
+    console.log('Testing manual refreshRoute...');
+    await refreshRoute();
+  } catch (e) {
+    console.error('Manual refreshRoute failed:', e);
+  }
+}
+
+async function testVisionAPI() {
+  console.log('=== TESTING VISION API ===');
+  
+  try {
+    // Test vision status
+    const statusR = await fetch('/api/vision/status', {credentials: 'include'});
+    const statusData = await statusR.json();
+    console.log('Vision status:', statusData);
+    
+    // Test vision toggle
+    const toggleR = await fetch('/api/vision/toggle', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: true}),
+      credentials: 'include'
+    });
+    const toggleData = await toggleR.json();
+    console.log('Vision toggle response:', toggleData);
+    
+  } catch (e) {
+    console.error('Vision API test failed:', e);
+  }
+}
+
+async function testNarrationImprovement() {
+  console.log('=== TESTING NARRATION IMPROVEMENT ===');
+  
+  try {
+    // Test the specific problematic instruction
+    const testR = await fetch('/api/test-narration', {credentials: 'include'});
+    const testData = await testR.json();
+    console.log('Narration test result:', testData);
+    
+    if (testData.success) {
+      console.log('Original:', testData.original);
+      console.log('Improved:', testData.improved);
+      console.log('Changes made:', testData.changes_made);
+      
+      // Speak the improved version
+      if (testData.improved) {
+        await speakText('Improved instruction: ' + testData.improved);
+      }
+    }
+    
+    // Also test with current instruction if available
+    const currentInstruction = document.getElementById('unifiedInstruction').textContent;
+    if (currentInstruction && currentInstruction !== '-') {
+      console.log('Testing current instruction:', currentInstruction);
+      const improveR = await fetch('/api/improve-narration', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({narration: currentInstruction}),
+        credentials: 'include'
+      });
+      const improveData = await improveR.json();
+      console.log('Current instruction improvement:', improveData);
+    }
+    
+  } catch (e) {
+    console.error('Narration improvement test failed:', e);
+  }
+}
+
+async function testTTS() {
+  console.log('=== TESTING TTS SYSTEM ===');
+  
+  try {
+    // Test basic TTS functionality
+    console.log('Testing basic TTS...');
+    await speakText('TTS test - this is a test message');
+    
+    // Test TTS API directly
+    console.log('Testing TTS API directly...');
+    const response = await fetch('/api/tts', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: 'Direct TTS API test'}),
+      credentials: 'include'
+    });
+    
+    console.log('TTS API response status:', response.status);
+    if (response.ok) {
+      console.log('TTS API working');
+      const audioBlob = await response.blob();
+      console.log('Audio blob size:', audioBlob.size);
+      
+      // Try to play it
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audio.onended = () => {
+        console.log('Direct TTS audio ended');
+        URL.revokeObjectURL(audioUrl);
+      };
+      audio.onerror = (e) => {
+        console.log('Direct TTS audio error:', e);
+        URL.revokeObjectURL(audioUrl);
+      };
+      await audio.play();
+      console.log('Direct TTS audio started');
+    } else {
+      const errorText = await response.text();
+      console.log('TTS API error:', errorText);
+    }
+    
+    // Test current instruction speaking
+    console.log('Testing current instruction speaking...');
+    const currentInstruction = document.getElementById('unifiedInstruction').textContent;
+    if (currentInstruction && currentInstruction !== '-') {
+      console.log('Speaking current instruction:', currentInstruction);
+      await speakText('Current instruction: ' + currentInstruction);
+    } else {
+      console.log('No current instruction to speak');
+    }
+    
+  } catch (e) {
+    console.error('TTS test failed:', e);
+  }
+}
+
+async function forceInstructionSpeaking() {
+  console.log('=== FORCING INSTRUCTION SPEAKING ===');
+  
+  try {
+    // Reset the instruction tracking to force speaking
+    lastInstructionText = '';
+    lastTTSInstruction = '';
+    ttsCooldown = false;
+    
+    console.log('Reset instruction tracking variables');
+    
+    // Manually trigger consolidated update
+    console.log('Manually triggering consolidated update...');
+    await consolidatedUpdate();
+    
+  } catch (e) {
+    console.error('Force instruction speaking failed:', e);
+  }
+}
+const vt=document.getElementById('visionToggle'); if(vt){ vt.addEventListener('change',e=> e.target.checked?startVision():stopVision()); }
+</script>
+</body>
+</html>

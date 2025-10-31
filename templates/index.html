@@ -1,0 +1,2147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation Assistant for Visually Impaired</title>
+    
+    <!-- Leaflet CSS for mapping -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""/>
+    
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            color: #4CAF50;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #cccccc;
+            margin-bottom: 20px;
+        }
+
+        .status-panel {
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .status-item {
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .status-label {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            background-color: #666666;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-danger {
+            background-color: #f44336;
+        }
+
+        .btn-danger:hover {
+            background-color: #da190b;
+        }
+
+        .btn-secondary {
+            background-color: #2196F3;
+        }
+
+        .btn-secondary:hover {
+            background-color: #1976D2;
+        }
+
+        .location-section {
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .location-section h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .location-display {
+            background-color: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #4CAF50;
+            margin-bottom: 15px;
+            font-family: monospace;
+        }
+
+        .navigation-section {
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #2196F3;
+        }
+
+        .navigation-section h3 {
+            color: #2196F3;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .navigation-display {
+            background-color: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #2196F3;
+            font-family: monospace;
+        }
+
+        .nav-info {
+            display: grid;
+            gap: 10px;
+        }
+
+        .nav-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .nav-item:last-child {
+            border-bottom: none;
+        }
+
+        .nav-label {
+            font-weight: bold;
+            color: #2196F3;
+            min-width: 150px;
+        }
+
+        .nav-item span:last-child {
+            color: #ffffff;
+            text-align: right;
+            flex: 1;
+            margin-left: 15px;
+        }
+
+        .search-results-section {
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #FF9800;
+        }
+
+        .search-results-section h3 {
+            color: #FF9800;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .search-results-display {
+            background-color: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #FF9800;
+        }
+
+        .search-prompt {
+            color: #ffffff;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .search-options {
+            margin-bottom: 15px;
+        }
+
+        .search-option {
+            background-color: #333333;
+            border: 2px solid #555555;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .search-option:hover {
+            border-color: #FF9800;
+            background-color: #3a3a3a;
+        }
+
+        .search-option.selected {
+            border-color: #FF9800;
+            background-color: #FF980020;
+        }
+
+        .search-option h4 {
+            color: #ffffff;
+            margin: 0 0 5px 0;
+            font-size: 1.1em;
+        }
+
+        .search-option p {
+            color: #cccccc;
+            margin: 0;
+            font-size: 0.9em;
+        }
+        
+        .option-number {
+            display: inline-block;
+            background-color: #FF9800;
+            color: #000;
+            font-weight: bold;
+            font-size: 1.2em;
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            text-align: center;
+            border-radius: 50%;
+            float: left;
+            margin-right: 10px;
+            margin-top: -2px;
+        }
+        
+        .search-option h4, .search-option p {
+            /* Support for Arabic text display */
+            unicode-bidi: bidi-override;
+            direction: ltr;
+            text-align: left;
+        }
+        
+        .search-option small {
+            color: #888;
+            font-size: 0.8em;
+            display: block;
+            margin-top: 5px;
+            clear: both;
+        }
+        
+        /* Navigation Map Styles */
+        .map-section {
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #9C27B0;
+        }
+        
+        .map-section h3 {
+            color: #9C27B0;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        
+        .map-container {
+            position: relative;
+            height: 400px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid #9C27B0;
+        }
+        
+        #navigation-map {
+            height: 100%;
+            width: 100%;
+        }
+        
+        .map-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .map-control-btn {
+            background-color: rgba(45, 45, 45, 0.9);
+            color: white;
+            border: 1px solid #9C27B0;
+            border-radius: 5px;
+            padding: 8px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .map-control-btn:hover {
+            background-color: #9C27B0;
+        }
+        
+        .route-info {
+            background-color: #1a1a1a;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border: 1px solid #9C27B0;
+            display: none;
+        }
+        
+        .route-info.active {
+            display: block;
+        }
+        
+        .route-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+        }
+        
+        .route-stat {
+            text-align: center;
+        }
+        
+        .route-stat-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #9C27B0;
+        }
+        
+        .route-stat-label {
+            font-size: 0.9em;
+            color: #cccccc;
+        }
+        
+        /* Mobile responsiveness for map */
+        @media (max-width: 768px) {
+            .map-container {
+                height: 300px;
+            }
+            
+            .map-controls {
+                top: 5px;
+                right: 5px;
+            }
+            
+            .map-control-btn {
+                padding: 6px 8px;
+                font-size: 11px;
+            }
+        }
+
+        .search-actions {
+            text-align: center;
+        }
+
+        .nav-instruction {
+            font-style: italic;
+            color: #4CAF50 !important;
+            /* Ensure proper Arabic text rendering */
+            unicode-bidi: bidi-override;
+            direction: ltr;
+            text-align: left;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Arial Unicode MS', sans-serif;
+        }
+
+
+        .logs {
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .logs h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .log-entry {
+            background-color: #1a1a1a;
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9em;
+            border-left: 2px solid #4CAF50;
+        }
+
+        .log-timestamp {
+            color: #888888;
+            margin-right: 10px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(76, 175, 80, 0.3);
+            border-radius: 50%;
+            border-top-color: #4CAF50;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: #f44336;
+        }
+
+        .success {
+            color: #4CAF50;
+        }
+
+        .info {
+            color: #2196F3;
+        }
+
+        .warning {
+            color: #ff9800;
+        }
+
+        .text-input-section {
+            background-color: #2d2d2d;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .text-input-section h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        #text-command-input {
+            flex: 1;
+            min-width: 300px;
+            padding: 12px 15px;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-size: 1em;
+            outline: none;
+        }
+
+        #text-command-input:focus {
+            border-color: #66bb6a;
+            box-shadow: 0 0 5px rgba(76, 175, 80, 0.3);
+        }
+
+        #text-command-input::placeholder {
+            color: #888888;
+        }
+
+        .command-examples {
+            margin-top: 10px;
+        }
+
+        .command-examples p {
+            margin-bottom: 8px;
+            color: #cccccc;
+        }
+
+        .example-commands {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .example-cmd {
+            background-color: #1a1a1a;
+            color: #4CAF50;
+            padding: 8px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            border: 1px solid #4CAF50;
+            transition: all 0.3s ease;
+        }
+
+        .example-cmd:hover {
+            background-color: #4CAF50;
+            color: #1a1a1a;
+            transform: translateY(-1px);
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 10px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            
+            .btn {
+                padding: 12px 20px;
+                font-size: 1em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Navigation Assistant</h1>
+            <p class="subtitle">Text-Based Navigation for Visually Impaired Users</p>
+        </header>
+
+        <div class="status-panel">
+            <h3>System Status</h3>
+            <div class="status-item">
+                <span class="status-label">Navigation System:</span>
+                <span id="nav-status">Initializing...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Location Access:</span>
+                <span id="location-status">Checking...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Current Activity:</span>
+                <span id="activity-status">Ready</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="start-btn" onclick="startNavigation()">🚀 Start Navigation</button>
+            <button class="btn btn-danger" id="stop-btn" onclick="stopNavigation()" disabled>⏹️ Stop Navigation</button>
+            <button class="btn btn-secondary" id="location-btn" onclick="getCurrentLocation()">📍 Get Location</button>
+            <label class="small" style="display:flex;align-items:center;gap:6px"><input id="visionToggle" type="checkbox"> Vision Assist</label>
+            <button class="btn btn-secondary" id="manual-loc-btn" onclick="toggleManualLocationMode()">📌 Set Location on Map</button>
+        </div>
+
+        <div class="text-input-section">
+            <h3>💬 Text Command Input</h3>
+            <div class="input-container">
+                <input type="text" id="text-command-input" placeholder="Type your command here... (e.g., 'Go to Mzyad Mall', 'Nearest hospital')" />
+                <button class="btn" id="send-command-btn" onclick="sendTextCommand()">
+                    ➤ Send Command
+                </button>
+            </div>
+            <div class="command-examples">
+                <p><strong>Examples:</strong></p>
+                <div class="example-commands">
+                    <span class="example-cmd" onclick="fillCommand('Go to Mazyad Mall')">Go to Mazyad Mall</span>
+                    <span class="example-cmd" onclick="fillCommand('Nearest hospital')">Nearest hospital</span>
+                    <span class="example-cmd" onclick="fillCommand('Where am I?')">Where am I?</span>
+                    <span class="example-cmd" onclick="fillCommand('stop navigation')">Stop Navigation</span>
+                    <span class="example-cmd" onclick="fillCommand('clear')">Clear & Reset</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="location-section">
+            <h3>📍 Current Location</h3>
+            <div class="location-display" id="location-display">
+                Location not detected. Click "Get Location" to enable.
+            </div>
+        </div>
+
+        <div class="navigation-section">
+            <h3>🧭 Navigation Status</h3>
+            <div class="navigation-display" id="navigation-display">
+                <div class="nav-info">
+                    <div class="nav-item">
+                        <span class="nav-label">Destination:</span>
+                        <span id="nav-destination">None</span>
+                    </div>
+                    <div class="nav-item">
+                        <span class="nav-label">Status:</span>
+                        <span id="nav-status-text">Ready</span>
+                    </div>
+                    <div class="nav-item">
+                        <span class="nav-label">Current Instruction:</span>
+                        <span id="nav-instruction">No active navigation</span>
+                    </div>
+                    <div class="nav-item">
+                        <span class="nav-label">Distance:</span>
+                        <span id="nav-distance">-</span>
+                    </div>
+                    <div class="nav-item">
+                        <span class="nav-label">Time:</span>
+                        <span id="nav-time">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-results-section" id="search-results-section" style="display: none;">
+            <h3>📍 Choose Your Destination</h3>
+            <div class="search-results-display" id="search-results-display">
+                <p class="search-prompt">Multiple locations found. Please choose one:</p>
+                <div class="search-options" id="search-options">
+                    <!-- Search result options will be populated here -->
+                </div>
+                <div class="search-actions">
+                    <button class="btn btn-secondary" onclick="cancelSelection()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="map-section">
+            <h3>🗺️ Navigation Map</h3>
+            <div class="map-container">
+                <div id="navigation-map"></div>
+                <div class="map-controls">
+                    <button class="map-control-btn" onclick="centerMapOnLocation()" title="Center on current location">📍</button>
+                    <button class="map-control-btn" onclick="toggleMapView()" title="Toggle map/satellite view">🛰️</button>
+                    <button class="map-control-btn" onclick="zoomToRoute()" title="Show full route">🔍</button>
+                    <button class="map-control-btn" onclick="toggleInstructionMarkers()" title="Toggle instruction points">🎯</button>
+                    <button class="map-control-btn" onclick="forceRouteDisplay()" title="Force route display">🔄</button>
+                </div>
+            </div>
+            <div style="margin-top:6px"><video id="visionPreview" autoplay playsinline muted style="width:240px;border:1px solid #333;display:none"></video></div>
+            <div class="route-info" id="route-info">
+                <div class="route-stats">
+                    <div class="route-stat">
+                        <div class="route-stat-value" id="route-distance">-</div>
+                        <div class="route-stat-label">Distance</div>
+                    </div>
+                    <div class="route-stat">
+                        <div class="route-stat-value" id="route-time">-</div>
+                        <div class="route-stat-label">Time</div>
+                    </div>
+                    <div class="route-stat">
+                        <div class="route-stat-value" id="route-progress">0%</div>
+                        <div class="route-stat-label">Progress</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="logs">
+            <h3>📋 Activity Log</h3>
+            <div id="log-container"></div>
+        </div>
+    </div>
+
+    <audio id="tts-audio" style="display:none"></audio>
+
+    <script>
+        let isNavigationActive = false;
+        let statusUpdateInterval;
+        let routeRefreshInterval;
+        
+        // Client-side TTS (browser speech synthesis)
+        let ttsEnabled = true;
+        let voices = [];
+        function loadVoices() {
+            voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+        }
+        if ('speechSynthesis' in window) {
+            loadVoices();
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+        function pickVoice(lang) {
+            if (!voices || voices.length === 0) return null;
+            // Prefer language-specific voice
+            let v = voices.find(v => v.lang && v.lang.toLowerCase().startsWith(lang || 'en'));
+            if (!v) v = voices.find(v => (v.lang || '').toLowerCase().startsWith('en'));
+            return v || voices[0];
+        }
+        function isArabic(text) {
+            return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text || '');
+        }
+        async function speakText(text) {
+            try {
+                if (!ttsEnabled || !text) return;
+                if ('speechSynthesis' in window && voices.length > 0) {
+                    const utter = new SpeechSynthesisUtterance(text);
+                    const lang = isArabic(text) ? 'ar' : 'en';
+                    const voice = pickVoice(lang);
+                    if (voice) utter.voice = voice;
+                    utter.lang = voice?.lang || (lang === 'ar' ? 'ar-SA' : 'en-US');
+                    utter.rate = 1.0;
+                    utter.volume = 1.0;
+                    window.speechSynthesis.cancel();
+                    window.speechSynthesis.speak(utter);
+                } else {
+                    // Fallback: request server TTS and play mp3
+                    const resp = await fetch('/api/tts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text })
+                    });
+                    if (resp.ok) {
+                        const blob = await resp.blob();
+                        const url = URL.createObjectURL(blob);
+                        const audio = document.getElementById('tts-audio');
+                        try { audio.pause(); audio.currentTime = 0; } catch {}
+                        audio.src = url;
+                        await audio.play().catch(()=>{});
+                        setTimeout(()=>URL.revokeObjectURL(url), 10000);
+                    }
+                }
+            } catch {}
+        }
+        
+        // Navigation map variables
+        let navigationMap = null;
+        let currentLocationMarker = null;
+        let destinationMarker = null;
+        let routeLine = null;
+        let currentRouteData = null;
+        let locationWatchId = null;
+        let mapView = 'streets'; // 'streets' or 'satellite'
+        let lastKnownLocation = null;
+        let isRerouteInProgress = false;
+        
+        // Instruction waypoint markers
+        let instructionMarkers = [];
+        let instructionMarkersVisible = true;
+        
+        // Manual location set mode
+        let manualSetMode = false;
+        let manualLocationMarker = null;
+        
+        // Throttle backend location updates
+        let lastBackendUpdateTime = 0;
+        let lastBackendLocation = null;
+
+        // Initialize the application
+        // Add navigation instruction polling interval
+        let navigationInstructionInterval = null;
+        
+        // Debounce for selection announcement
+        let selectionAnnounced = false;
+        let lastSelectionCount = 0;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            addLog('Application initialized', 'info');
+            
+            // Initialize the navigation map
+            initializeMap();
+            
+            refreshStatus();
+            
+            // Start periodic status updates (reduced frequency for better performance)
+            statusUpdateInterval = setInterval(refreshStatus, 10000); // Update every 10 seconds (reduced from 5)
+            
+            // Start continuous navigation instruction polling (reduced frequency)
+            navigationInstructionInterval = setInterval(function() {
+                if (isNavigationActive) {
+                    getCurrentNavigationInstruction();
+                }
+            }, 8000); // Reduced from 3 seconds to 8 seconds
+            
+            // Request location permission on load
+            getCurrentLocation();
+            
+            // If running on HTTP (non-local), use IP-based fallback to avoid browser geolocation restrictions
+            try {
+                if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    addLog('Non-HTTPS detected: using IP-based location fallback for accuracy', 'warning');
+                    fallbackGetLocationViaIP();
+                }
+            } catch {}
+            
+            // Start real-time location tracking
+            startLocationTracking();
+        });
+
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('log-container');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span>${message}`;
+            
+            logContainer.insertBefore(logEntry, logContainer.firstChild);
+            
+            // Keep only last 50 log entries
+            while (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.lastChild);
+            }
+        }
+
+        function setButtonState(buttonId, enabled) {
+            const button = document.getElementById(buttonId);
+            if (button) {
+                button.disabled = !enabled;
+            }
+        }
+
+        function updateStatus(status) {
+            const navStatus = document.getElementById('nav-status');
+            const locationStatus = document.getElementById('location-status');
+            const activityStatus = document.getElementById('activity-status');
+            
+            // Debug logging for search results state
+            if (status.waiting_for_selection || (status.search_results && status.search_results.length > 0)) {
+                addLog(`Status Update: waiting=${status.waiting_for_selection}, results=${status.search_results ? status.search_results.length : 0}`, 'info');
+            }
+            
+            if (status.initialized) {
+                navStatus.textContent = isNavigationActive ? 'Active' : 'Ready';
+                navStatus.className = isNavigationActive ? 'success' : 'info';
+                
+                locationStatus.textContent = status.has_current_location ? 'Available' : 'Not Available';
+                locationStatus.className = status.has_current_location ? 'success' : 'warning';
+                
+                if (status.is_navigating) {
+                    activityStatus.textContent = `Navigating to ${status.current_destination || 'destination'}`;
+                    activityStatus.className = 'success';
+                    isNavigationActive = true;
+                    
+                    // Ensure search results are hidden during navigation
+                    showSearchResults([]);
+                    
+                    // Try to get and display route on map
+                    if (status.current_destination) {
+                        addLog(`Navigation active, requesting route for: ${status.current_destination}`, 'info');
+                        requestRouteForMapping();
+                        
+                        // Start periodic route refresh to ensure route displays
+                        if (routeRefreshInterval) {
+                            clearInterval(routeRefreshInterval);
+                        }
+                        routeRefreshInterval = setInterval(() => {
+                            if (isNavigationActive) {
+                                addLog('Periodic route refresh...', 'info');
+                                requestRouteForMapping();
+                            }
+                        }, 5000); // Refresh every 5 seconds
+                    }
+                } else if (status.waiting_for_selection) {
+                    activityStatus.textContent = 'Waiting for user selection';
+                    activityStatus.className = 'warning';
+                    // FORCE show search results - this is the key fix
+                    if (status.search_results && status.search_results.length > 0) {
+                        console.log('Showing search results:', status.search_results);
+                        showSearchResults(status.search_results);
+                        addLog(`Displaying ${status.search_results.length} location options`, 'success');
+                        if (!selectionAnnounced || lastSelectionCount !== status.search_results.length) {
+                            speakText(`Found ${status.search_results.length} options. Please select a number.`);
+                            selectionAnnounced = true;
+                            lastSelectionCount = status.search_results.length;
+                        }
+                        
+                        // Force the search section to be visible
+                        const searchSection = document.getElementById('search-results-section');
+                        if (searchSection) {
+                            searchSection.style.display = 'block';
+                            searchSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    } else {
+                        addLog('WARNING: waiting_for_selection=true but no search_results!', 'error');
+                        console.error('Selection state but no results:', status);
+                    }
+                } else {
+                    activityStatus.textContent = 'Ready for commands';
+                    activityStatus.className = 'info';
+                    isNavigationActive = false;
+                    
+                    // Hide search results when not waiting for selection
+                    showSearchResults([]);
+                    selectionAnnounced = false;
+                    lastSelectionCount = 0;
+                    
+                    // Clear route from map when not navigating
+                    clearRouteFromMap();
+                }
+                
+                // Update button states
+                setButtonState('start-btn', !isNavigationActive);
+                setButtonState('stop-btn', isNavigationActive);
+                setButtonState('advance-btn', isNavigationActive);
+                
+                // Update navigation display
+                updateNavigationDisplay(status);
+            } else {
+                navStatus.textContent = 'Not Initialized';
+                navStatus.className = 'error';
+                locationStatus.textContent = 'Unavailable';
+                locationStatus.className = 'error';
+                activityStatus.textContent = 'System not ready';
+                activityStatus.className = 'error';
+                
+                setButtonState('start-btn', true);
+                setButtonState('stop-btn', false);
+                setButtonState('advance-btn', false);
+                
+                // Clear navigation display
+                updateNavigationDisplay({});
+            }
+        }
+
+        function updateNavigationDisplay(status) {
+            const destination = document.getElementById('nav-destination');
+            const statusText = document.getElementById('nav-status-text');
+            const instruction = document.getElementById('nav-instruction');
+            const distance = document.getElementById('nav-distance');
+            const time = document.getElementById('nav-time');
+            
+            if (status.is_navigating && status.current_destination) {
+                destination.textContent = status.current_destination;
+                statusText.textContent = 'Navigating';
+                statusText.className = 'success';
+                
+                // Try to get current navigation instruction
+                getCurrentNavigationInstruction();
+            } else {
+                destination.textContent = 'None';
+                statusText.textContent = status.initialized ? 'Ready' : 'Not Ready';
+                statusText.className = status.initialized ? 'info' : 'error';
+                instruction.textContent = 'No active navigation';
+                distance.textContent = '-';
+                time.textContent = '-';
+            }
+        }
+
+        // Track last displayed instruction to detect changes
+        let lastDisplayedInstruction = null;
+        
+        async function getCurrentNavigationInstruction() {
+            try {
+                if (!isNavigationActive) {
+                    return;
+                }
+                
+                const response = await fetch('/api/navigation/current-instruction', {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.instruction) {
+                        const instruction = document.getElementById('nav-instruction');
+                        const distance = document.getElementById('nav-distance');
+                        const time = document.getElementById('nav-time');
+                        
+                        // Preserve Arabic text in navigation instructions
+                        const instructionText = data.instruction.speech_instruction || data.instruction.instruction || 'Continue on route';
+                        
+                        // Only update if instruction has changed
+                        if (instructionText !== lastDisplayedInstruction) {
+                            instruction.textContent = instructionText;
+                            lastDisplayedInstruction = instructionText;
+                            
+                            addLog(`Navigation: ${instructionText}`, 'success');
+                            // Speak in browser
+                            speakText(instructionText);
+                            
+                            // Log Arabic instructions for debugging
+                            if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(instructionText)) {
+                                addLog(`Arabic instruction displayed: ${instructionText}`, 'info');
+                            }
+                        }
+                        
+                        distance.textContent = data.instruction.distance ? `${Math.round(data.instruction.distance)}m` : '-';
+                        time.textContent = data.instruction.duration ? `${Math.round(data.instruction.duration/60)}min` : '-';
+                        
+                        // Highlight instruction
+                        instruction.className = 'nav-instruction';
+                        
+                        // Update route progress if available
+                        if (data.instruction.progress) {
+                            const progressElement = document.getElementById('route-progress');
+                            if (progressElement && data.instruction.progress.progress_percentage) {
+                                progressElement.textContent = `${data.instruction.progress.progress_percentage}%`;
+                            }
+                        }
+                    }
+                } else if (response.status === 400) {
+                    // Navigation ended
+                    lastDisplayedInstruction = null;
+                }
+            } catch (error) {
+                console.log('Could not get navigation instruction:', error);
+            }
+        }
+
+        async function startNavigation() {
+            try {
+                addLog('Starting navigation system...', 'info');
+                setButtonState('start-btn', false);
+                
+                const response = await fetch('/api/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    isNavigationActive = true;
+                    addLog('Navigation system started successfully', 'success');
+                    speakText('Navigation system started');
+                    addLog('Voice recognition is now active. You can speak your commands.', 'info');
+                    setButtonState('stop-btn', true);
+                } else {
+                    addLog(`Failed to start navigation: ${result.message}`, 'error');
+                    setButtonState('start-btn', true);
+                }
+                
+                refreshStatus();
+            } catch (error) {
+                addLog(`Error starting navigation: ${error.message}`, 'error');
+                setButtonState('start-btn', true);
+            }
+        }
+
+        async function stopNavigation() {
+            try {
+                addLog('Stopping navigation system...', 'info');
+                setButtonState('stop-btn', false);
+                
+                const response = await fetch('/api/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    isNavigationActive = false;
+                    
+                    // Clear route refresh interval
+                    if (routeRefreshInterval) {
+                        clearInterval(routeRefreshInterval);
+                        routeRefreshInterval = null;
+                    }
+                    addLog('Navigation system stopped', 'success');
+                    setButtonState('start-btn', true);
+                } else {
+                    addLog(`Error stopping navigation: ${result.message}`, 'error');
+                    setButtonState('stop-btn', true);
+                }
+                
+                refreshStatus();
+            } catch (error) {
+                addLog(`Error stopping navigation: ${error.message}`, 'error');
+                setButtonState('stop-btn', true);
+            }
+        }
+
+        function getCurrentLocation() {
+            if (!navigator.geolocation) {
+                addLog('Geolocation is not supported by this browser', 'error');
+                // Fallback to IP-based on server
+                return useIPLocation();
+            }
+
+            addLog('Requesting location access...', 'info');
+            
+            navigator.geolocation.getCurrentPosition(
+                async function(position) {
+                    const latitude = position.coords.latitude;
+                    const longitude = position.coords.longitude;
+                    
+                    try {
+                        const response = await fetch('/api/location', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                latitude: latitude,
+                                longitude: longitude
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            const locationDisplay = document.getElementById('location-display');
+                            locationDisplay.innerHTML = `
+                                <strong>Coordinates:</strong> ${latitude.toFixed(6)}, ${longitude.toFixed(6)}<br>
+                                <strong>Accuracy:</strong> ±${position.coords.accuracy}m<br>
+                                <strong>Last Updated:</strong> ${new Date().toLocaleString()}
+                            `;
+                            addLog('Location updated successfully', 'success');
+                        } else {
+                            addLog(`Failed to update location: ${result.message}`, 'error');
+                        }
+                        
+                        refreshStatus();
+                    } catch (error) {
+                        addLog(`Error sending location: ${error.message}`, 'error');
+                    }
+                },
+                function(error) {
+                    let errorMessage = 'Unknown error';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = 'Location access denied by user';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = 'Location information unavailable';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = 'Location request timed out';
+                            break;
+                    }
+                    addLog(`Geolocation error: ${errorMessage}`, 'error');
+                    // Fallback: ask server to derive from client IP
+                    useIPLocation();
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 300000 // 5 minutes
+                }
+            );
+        }
+
+        async function refreshStatus() {
+            try {
+                const response = await fetch('/api/status', {
+                    credentials: 'include'
+                });
+                const status = await response.json();
+                
+                updateStatus(status);
+                
+                if (status.error) {
+                    addLog(`Status error: ${status.error}`, 'error');
+                }
+            } catch (error) {
+                addLog(`Error refreshing status: ${error.message}`, 'error');
+                
+                // Update status to show error state
+                updateStatus({ initialized: false });
+            }
+        }
+
+        // Handle page visibility changes to pause/resume updates
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                if (statusUpdateInterval) {
+                    clearInterval(statusUpdateInterval);
+                }
+            } else {
+                refreshStatus();
+                statusUpdateInterval = setInterval(refreshStatus, 10000);
+            }
+        });
+
+        // Handle page unload
+        window.addEventListener('beforeunload', function() {
+            if (statusUpdateInterval) {
+                clearInterval(statusUpdateInterval);
+            }
+        });
+
+        // Text command functionality
+        function sendTextCommand() {
+            const input = document.getElementById('text-command-input');
+            const command = input.value.trim();
+            
+            if (!command) {
+                addLog('Please enter a command', 'warning');
+                return;
+            }
+            
+            addLog(`Text command: "${command}"`, 'info');
+            
+            // Send the text command to the server
+            fetch('/api/text-command', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    command: command
+                }),
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addLog(`Command processed: ${data.message || 'Success'}`, 'success');
+                    input.value = ''; // Clear the input
+                    
+                    // Immediate status refresh for search commands
+                    setTimeout(refreshStatus, 100); // Quick refresh
+                    setTimeout(refreshStatus, 500); // Follow-up refresh
+                    setTimeout(refreshStatus, 1500); // Handle slower API responses
+                } else {
+                    addLog(`Command failed: ${data.message || 'Unknown error'}`, 'error');
+                }
+                refreshStatus(); // Regular refresh
+            })
+            .catch(error => {
+                addLog(`Error sending command: ${error.message}`, 'error');
+            });
+        }
+
+        function fillCommand(command) {
+            const input = document.getElementById('text-command-input');
+            input.value = command;
+            input.focus();
+        }
+
+        // Allow Enter key to send command
+        document.addEventListener('DOMContentLoaded', function() {
+            const input = document.getElementById('text-command-input');
+            if (input) {
+                input.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        sendTextCommand();
+                    }
+                });
+            }
+        });
+
+        function showSearchResults(searchResults) {
+            const searchSection = document.getElementById('search-results-section');
+            const searchOptions = document.getElementById('search-options');
+            
+            // Debug logging
+            console.log('showSearchResults called with:', searchResults);
+            addLog(`Search results update: ${searchResults ? searchResults.length : 0} results`, 'info');
+            
+            if (searchResults && searchResults.length > 0) {
+                addLog(`Displaying ${searchResults.length} search options`, 'info');
+                searchOptions.innerHTML = '';
+                
+                // Sort by distance if available
+                try {
+                    searchResults.sort((a, b) => {
+                        const da = (a.distance_meters ?? (a.distance ? a.distance * 1000 : Number.MAX_SAFE_INTEGER));
+                        const db = (b.distance_meters ?? (b.distance ? b.distance * 1000 : Number.MAX_SAFE_INTEGER));
+                        return da - db;
+                    });
+                } catch (e) {}
+                
+                searchResults.forEach((result, index) => {
+                    const optionDiv = document.createElement('div');
+                    optionDiv.className = 'search-option';
+                    optionDiv.onclick = () => selectSearchResult(index + 1);
+                    
+                    // Preserve Arabic text in display
+                    const displayName = result.display_name || result.name || `Option ${index + 1}`;
+                    const address = result.address || 'Address not available';
+                    const distM = result.distance_meters ?? (result.distance ? Math.round(result.distance * 1000) : null);
+                    const distText = distM != null ? ` • ${distM < 1000 ? distM + ' m' : (distM/1000).toFixed(1) + ' km'}` : '';
+                    
+                    optionDiv.innerHTML = `
+                        <div class="option-number">${index + 1}</div>
+                        <h4>${displayName}</h4>
+                        <p>${address}${distText}</p>
+                        <small>Click to select</small>
+                    `;
+                    
+                    searchOptions.appendChild(optionDiv);
+                    
+                    // Debug log each option
+                    addLog(`Option ${index + 1}: ${displayName}`, 'info');
+                });
+                
+                searchSection.style.display = 'block';
+                addLog('Search options section shown', 'success');
+            } else {
+                addLog('Hiding search options section', 'info');
+                searchSection.style.display = 'none';
+            }
+        }
+
+        function selectSearchResult(optionNumber) {
+            addLog(`Selecting option ${optionNumber}...`, 'info');
+            
+            // Send selection command to backend
+            fetch('/api/text-command', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    command: `${optionNumber}`
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addLog(`Selection processed: ${data.message || 'Success'}`, 'success');
+                    // Hide search results section immediately after successful selection
+                    const searchSection = document.getElementById('search-results-section');
+                    searchSection.style.display = 'none';
+                    selectionAnnounced = false;
+                    lastSelectionCount = 0;
+                    // Force status refresh to update UI
+                    refreshStatus();
+                } else {
+                    addLog(`Selection failed: ${data.message || 'Unknown error'}`, 'error');
+                }
+            })
+            .catch(error => {
+                addLog(`Error processing selection: ${error.message}`, 'error');
+            });
+        }
+
+        function cancelSelection() {
+            addLog('Cancelling selection...', 'info');
+            
+            // Send cancel command
+            fetch('/api/text-command', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    command: 'cancel'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addLog(`Cancel processed: ${data.message || 'Success'}`, 'success');
+                    // Hide search results section immediately after successful cancel
+                    const searchSection = document.getElementById('search-results-section');
+                    searchSection.style.display = 'none';
+                    selectionAnnounced = false;
+                    lastSelectionCount = 0;
+                    // Force status refresh to update UI
+                    refreshStatus();
+                } else {
+                    addLog(`Cancel failed: ${data.message || 'Unknown error'}`, 'error');
+                }
+            })
+            .catch(error => {
+                addLog(`Error processing cancel: ${error.message}`, 'error');
+            });
+        }
+        
+        // ===== NAVIGATION MAP FUNCTIONS =====
+        
+        function initializeMap() {
+            try {
+                addLog('Initializing map...', 'info');
+                // Initialize the Leaflet map centered on Dubai (default location)
+                navigationMap = L.map('navigation-map').setView([25.2048, 55.2708], 13);
+                addLog('Map initialized successfully', 'success');
+                
+                // Add OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(navigationMap);
+                
+                // Add map click handler
+                navigationMap.on('click', function(e) {
+                    if (manualSetMode) {
+                        const lat = e.latlng.lat;
+                        const lng = e.latlng.lng;
+                        // Place or move manual marker
+                        if (manualLocationMarker) {
+                            manualLocationMarker.setLatLng(e.latlng);
+                        } else {
+                            manualLocationMarker = L.marker(e.latlng).addTo(navigationMap).bindPopup('Manual location');
+                        }
+                        // Update UI and backend
+                        const fakePos = { coords: { latitude: lat, longitude: lng, accuracy: 10 } };
+                        updateLocationOnMap(fakePos);
+                        updateBackendLocation(lat, lng);
+                        addLog(`Manual location set: ${lat.toFixed(6)}, ${lng.toFixed(6)}`, 'success');
+                        manualSetMode = false;
+                        const btn = document.getElementById('manual-loc-btn');
+                        if (btn) btn.classList.remove('btn-danger');
+                    } else {
+                        console.log('Map clicked at:', e.latlng);
+                    }
+                });
+                
+                addLog('Navigation map initialized', 'success');
+            } catch (error) {
+                addLog(`Error initializing map: ${error.message}`, 'error');
+            }
+        }
+        
+        function startLocationTracking() {
+            if (!navigator.geolocation) {
+                addLog('Geolocation is not supported by this browser', 'error');
+                return;
+            }
+            
+            // Watch position with high accuracy
+            locationWatchId = navigator.geolocation.watchPosition(
+                updateLocationOnMap,
+                function(error) {
+                    addLog(`Location tracking error: ${error.message}`, 'error');
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 5000 // Update every 5 seconds
+                }
+            );
+            
+            addLog('Location tracking started', 'info');
+        }
+        
+        function updateLocationOnMap(position) {
+            try {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                const accuracy = position.coords.accuracy;
+                
+                // Send location update to backend
+                updateBackendLocation(lat, lng);
+                
+                addLog(`Location update: ${lat.toFixed(6)}, ${lng.toFixed(6)} (±${Math.round(accuracy)}m)`, 'info');
+                
+                // Update current location marker
+                if (currentLocationMarker) {
+                    currentLocationMarker.setLatLng([lat, lng]);
+                    // Update accuracy circle if it exists
+                    if (currentLocationMarker.accuracyCircle) {
+                        currentLocationMarker.accuracyCircle.setLatLng([lat, lng]);
+                        currentLocationMarker.accuracyCircle.setRadius(accuracy);
+                    }
+                } else {
+                    // Create location marker with custom icon
+                    const locationIcon = L.divIcon({
+                        html: '<div style="background: #4285f4; border: 3px solid white; border-radius: 50%; width: 16px; height: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>',
+                        iconSize: [22, 22],
+                        iconAnchor: [11, 11],
+                        className: 'current-location-marker'
+                    });
+                    
+                    currentLocationMarker = L.marker([lat, lng], { icon: locationIcon })
+                        .addTo(navigationMap)
+                        .bindPopup(`Your Location<br>Accuracy: ±${Math.round(accuracy)}m`);
+                    
+                    // Add accuracy circle
+                    currentLocationMarker.accuracyCircle = L.circle([lat, lng], {
+                        radius: accuracy,
+                        fillColor: '#4285f4',
+                        fillOpacity: 0.1,
+                        color: '#4285f4',
+                        weight: 1,
+                        opacity: 0.3
+                    }).addTo(navigationMap);
+                    
+                    // Center map on first location
+                    navigationMap.setView([lat, lng], 16);
+                }
+                
+                // Store last known location
+                lastKnownLocation = { lat, lng };
+                
+                // Also send to backend with throttling
+                updateBackendLocation(lat, lng);
+                
+                // Check for rerouting if navigation is active
+                if (isNavigationActive && currentRouteData) {
+                    checkForRerouting(lat, lng);
+                }
+                
+                // Update route progress if navigating
+                if (isNavigationActive && currentRouteData) {
+                    updateRouteProgress(lat, lng);
+                }
+                
+            } catch (error) {
+                addLog(`Error updating location on map: ${error.message}`, 'error');
+            }
+        }
+        
+        function displayRouteOnMap(routeData) {
+            try {
+                addLog(`displayRouteOnMap called: map=${!!navigationMap}, routeData=${!!routeData}`, 'info');
+                if (!navigationMap || !routeData) {
+                    addLog('Cannot display route: missing map or route data', 'warning');
+                    return;
+                }
+                
+                // Clear existing route
+                if (routeLine) {
+                    navigationMap.removeLayer(routeLine);
+                }
+                
+                let coordinates = [];
+                
+                // Handle different route data formats
+                if (routeData.geometry) {
+                    if (typeof routeData.geometry === 'string') {
+                        // OSRM encoded polyline format
+                        coordinates = decodePolyline(routeData.geometry);
+                        addLog('Using encoded polyline geometry', 'info');
+                    } else if (routeData.geometry.coordinates) {
+                        // GeoJSON LineString format
+                        coordinates = routeData.geometry.coordinates.map(coord => [coord[1], coord[0]]); // Convert [lng, lat] to [lat, lng]
+                        addLog('Using GeoJSON coordinates', 'info');
+                    } else if (routeData.geometry.type === 'LineString') {
+                        // Direct GeoJSON format
+                        coordinates = routeData.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                        addLog('Using direct GeoJSON LineString', 'info');
+                    }
+                } else if (routeData.coordinates) {
+                    // Direct coordinates array
+                    coordinates = routeData.coordinates.map(coord => [coord[1], coord[0]]); // Convert [lng, lat] to [lat, lng]
+                    addLog('Using direct coordinates array', 'info');
+                }
+                
+                addLog(`Processed coordinates: ${coordinates.length} points`, 'info');
+                if (coordinates && coordinates.length > 0) {
+                    // Create route line
+                    addLog(`Creating route line with ${coordinates.length} coordinates`, 'info');
+                    routeLine = L.polyline(coordinates, {
+                        color: '#4CAF50',
+                        weight: 6,
+                        opacity: 0.8
+                    }).addTo(navigationMap);
+                    
+                    // Add waypoint markers for where next instructions trigger
+                    try {
+                        // Clear existing markers
+                        instructionMarkers.forEach(m => { try { navigationMap.removeLayer(m); } catch(e){} });
+                        instructionMarkers = [];
+                        if (routeData.instructions && Array.isArray(routeData.instructions)) {
+                            routeData.instructions.forEach((step, idx) => {
+                                let latlng = null;
+                                // Prefer explicit maneuver location
+                                if (step.maneuver_location && typeof step.maneuver_location.lat === 'number' && typeof step.maneuver_location.lng === 'number') {
+                                    latlng = [step.maneuver_location.lat, step.maneuver_location.lng];
+                                } else {
+                                    const wp = step.way_points;
+                                    if (wp && wp.length >= 2 && routeData.geometry && routeData.geometry.coordinates) {
+                                        const endIdx = wp[1];
+                                        if (endIdx >= 0 && endIdx < routeData.geometry.coordinates.length) {
+                                            const c = routeData.geometry.coordinates[endIdx]; // [lng, lat]
+                                            latlng = [c[1], c[0]];
+                                        }
+                                    }
+                                }
+                                if (latlng) {
+                                    const marker = L.circleMarker(latlng, {
+                                        radius: 6,
+                                        color: '#FF9800',
+                                        fillColor: '#FF9800',
+                                        fillOpacity: 0.95
+                                    }).bindTooltip(`Step ${idx + 1}: ${(step.speech_instruction || step.instruction || '').toString().toLowerCase()}`, {direction: 'top'});
+                                    instructionMarkers.push(marker);
+                                    if (instructionMarkersVisible) marker.addTo(navigationMap);
+                                }
+                            });
+                        }
+                    } catch (e) { addLog(`Error adding instruction markers: ${e.message}`, 'error'); }
+                    
+                    // Add destination marker
+                    if (coordinates.length > 0) {
+                        const lastCoord = coordinates[coordinates.length - 1];
+                        const destIcon = L.divIcon({
+                            html: '🎯',
+                            iconSize: [25, 25],
+                            className: 'destination-marker'
+                        });
+                        
+                        if (destinationMarker) {
+                            navigationMap.removeLayer(destinationMarker);
+                        }
+                        
+                        destinationMarker = L.marker(lastCoord, { icon: destIcon })
+                            .addTo(navigationMap)
+                            .bindPopup('Destination');
+                    }
+                    
+                    // Fit map to show entire route
+                    navigationMap.fitBounds(routeLine.getBounds(), { padding: [20, 20] });
+                    
+                    addLog(`Route displayed on map with ${coordinates.length} points`, 'success');
+                } else {
+                    addLog('No valid route coordinates found for map display', 'warning');
+                }
+                
+                // Store route data
+                currentRouteData = routeData;
+                
+                // Show route info
+                showRouteInfo(routeData);
+                
+            } catch (error) {
+                addLog(`Error displaying route on map: ${error.message}`, 'error');
+                console.error('Route display error:', error, routeData);
+            }
+        }
+        
+        function showRouteInfo(routeData) {
+            try {
+                const routeInfo = document.getElementById('route-info');
+                const distanceElement = document.getElementById('route-distance');
+                const timeElement = document.getElementById('route-time');
+                
+                if (routeData.total_distance && routeData.total_duration) {
+                    const distance = routeData.total_distance < 1000 
+                        ? `${Math.round(routeData.total_distance)}m`
+                        : `${(routeData.total_distance / 1000).toFixed(1)}km`;
+                    
+                    const duration = routeData.total_duration < 3600
+                        ? `${Math.round(routeData.total_duration / 60)}min`
+                        : `${Math.floor(routeData.total_duration / 3600)}h ${Math.round((routeData.total_duration % 3600) / 60)}min`;
+                    
+                    distanceElement.textContent = distance;
+                    timeElement.textContent = duration;
+                    
+                    routeInfo.classList.add('active');
+                }
+            } catch (error) {
+                console.error('Error showing route info:', error);
+            }
+        }
+        
+        function checkForRerouting(currentLat, currentLng) {
+            // Simple rerouting logic - check if user is too far from route
+            // This is a basic implementation - can be enhanced
+            if (isRerouteInProgress || !routeLine) return;
+            
+            try {
+                const currentPoint = L.latLng(currentLat, currentLng);
+                const routePoints = routeLine.getLatLngs();
+                
+                // Find closest point on route
+                let minDistance = Infinity;
+                for (const point of routePoints) {
+                    const distance = currentPoint.distanceTo(point);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                    }
+                }
+                
+                // If user is more than 100m from route, trigger rerouting
+                if (minDistance > 100) {
+                    addLog(`User deviated ${Math.round(minDistance)}m from route - requesting reroute`, 'warning');
+                    requestReroute(currentLat, currentLng);
+                }
+                
+            } catch (error) {
+                console.error('Error checking for rerouting:', error);
+            }
+        }
+        
+        function requestReroute(currentLat, currentLng) {
+            if (isRerouteInProgress) return;
+            
+            isRerouteInProgress = true;
+            addLog('Requesting automatic reroute...', 'info');
+            
+            // Update current location in backend
+            fetch('/api/location', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    latitude: currentLat,
+                    longitude: currentLng
+                })
+            })
+            .then(() => {
+                // Trigger reroute by sending a reroute command
+                return fetch('/api/text-command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: 'reroute' })
+                });
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addLog('Reroute completed', 'success');
+                } else {
+                    addLog('Reroute failed', 'error');
+                }
+                isRerouteInProgress = false;
+                refreshStatus();
+            })
+            .catch(error => {
+                addLog(`Reroute error: ${error.message}`, 'error');
+                isRerouteInProgress = false;
+            });
+        }
+        
+        function updateRouteProgress(currentLat, currentLng) {
+            // Calculate progress along route (simplified)
+            try {
+                if (!currentRouteData || !routeLine) return;
+                
+                const progressElement = document.getElementById('route-progress');
+                // This is a simplified calculation - can be made more accurate
+                const progress = Math.min(50, Math.random() * 100); // Placeholder logic
+                progressElement.textContent = `${Math.round(progress)}%`;
+                
+            } catch (error) {
+                console.error('Error updating route progress:', error);
+            }
+        }
+        
+        function toggleManualLocationMode() {
+            manualSetMode = !manualSetMode;
+            const btn = document.getElementById('manual-loc-btn');
+            if (btn) btn.classList.toggle('btn-danger', manualSetMode);
+            addLog(manualSetMode ? 'Manual mode: click on the map to set your location' : 'Manual location mode off', 'info');
+        }
+        
+        // Map control functions
+        function centerMapOnLocation() {
+            if (lastKnownLocation && navigationMap) {
+                navigationMap.setView([lastKnownLocation.lat, lastKnownLocation.lng], 16);
+                addLog('Map centered on current location', 'info');
+            } else {
+                addLog('Current location not available', 'warning');
+            }
+        }
+        
+        function toggleMapView() {
+            if (!navigationMap) return;
+            
+            try {
+                // Remove current tile layer
+                navigationMap.eachLayer(function(layer) {
+                    if (layer instanceof L.TileLayer) {
+                        navigationMap.removeLayer(layer);
+                    }
+                });
+                
+                if (mapView === 'streets') {
+                    // Switch to satellite view
+                    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                        attribution: 'Esri, DigitalGlobe, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community'
+                    }).addTo(navigationMap);
+                    mapView = 'satellite';
+                    addLog('Switched to satellite view', 'info');
+                } else {
+                    // Switch back to streets
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(navigationMap);
+                    mapView = 'streets';
+                    addLog('Switched to streets view', 'info');
+                }
+            } catch (error) {
+                addLog(`Error toggling map view: ${error.message}`, 'error');
+            }
+        }
+        
+        function zoomToRoute() {
+            if (routeLine && navigationMap) {
+                navigationMap.fitBounds(routeLine.getBounds());
+                addLog('Zoomed to show full route', 'info');
+            } else {
+                addLog('No active route to display', 'warning');
+            }
+        }
+        
+        function toggleInstructionMarkers() {
+            instructionMarkersVisible = !instructionMarkersVisible;
+            if (!navigationMap) return;
+            instructionMarkers.forEach(m => {
+                try {
+                    if (instructionMarkersVisible) {
+                        m.addTo(navigationMap);
+                    } else {
+                        navigationMap.removeLayer(m);
+                    }
+                } catch {}
+            });
+            addLog(instructionMarkersVisible ? 'Instruction points shown' : 'Instruction points hidden', 'info');
+        }
+        
+        // Utility function to decode polyline geometry
+        function decodePolyline(encoded) {
+            // Simple polyline decoder - this is a basic implementation
+            // For production, consider using a more robust library
+            try {
+                const coordinates = [];
+                let index = 0;
+                let lat = 0;
+                let lng = 0;
+                
+                while (index < encoded.length) {
+                    let shift = 0;
+                    let result = 0;
+                    let byte;
+                    
+                    do {
+                        byte = encoded.charCodeAt(index++) - 63;
+                        result |= (byte & 0x1f) << shift;
+                        shift += 5;
+                    } while (byte >= 0x20);
+                    
+                    const deltaLat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+                    lat += deltaLat;
+                    
+                    shift = 0;
+                    result = 0;
+                    
+                    do {
+                        byte = encoded.charCodeAt(index++) - 63;
+                        result |= (byte & 0x1f) << shift;
+                        shift += 5;
+                    } while (byte >= 0x20);
+                    
+                    const deltaLng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+                    lng += deltaLng;
+                    
+                    coordinates.push([lat / 1e5, lng / 1e5]);
+                }
+                
+                return coordinates;
+            } catch (error) {
+                console.error('Error decoding polyline:', error);
+                return [];
+            }
+        }
+        
+        // ===== Vision Assist streaming =====
+        let mediaStream=null, sendTimer=null, lastShot=0;
+        async function startVision(){
+            try{
+                mediaStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:640,height:480}, audio:false});
+                const v=document.getElementById('visionPreview'); v.srcObject=mediaStream; v.style.display='block';
+                await fetch('/api/vision/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:true}),credentials:'include'});
+                const cv=document.createElement('canvas'), ctx=cv.getContext('2d'); cv.width=640; cv.height=480;
+                sendTimer=setInterval(async()=>{
+                    const now=Date.now(); if(now-lastShot<900) return; lastShot=now;
+                    const vv=document.getElementById('visionPreview'); if(!vv || !vv.videoWidth) return;
+                    ctx.drawImage(vv,0,0,640,480); const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.6));
+                    const fd=new FormData(); fd.append('image', blob, 'frame.jpg');
+                    const st=await (await fetch('/api/status',{credentials:'include'})).json().catch(()=>({}));
+                    fd.append('context', JSON.stringify({ts:new Date().toISOString(), status: st}));
+                    await fetch('/api/vision/frame',{method:'POST',body:fd,credentials:'include'}).catch(()=>{});
+                },1000);
+            }catch(e){addLog('Vision failed: '+e.message,'error');}
+        }
+        async function stopVision(){
+            try{await fetch('/api/vision/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:false}),credentials:'include'});}catch{}
+            if(sendTimer) clearInterval(sendTimer); sendTimer=null;
+            if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
+            const v=document.getElementById('visionPreview'); v.srcObject=null; v.style.display='none';
+        }
+        document.addEventListener('DOMContentLoaded',()=>{
+            const vt=document.getElementById('visionToggle'); if(vt){ vt.addEventListener('change',e=> e.target.checked?startVision():stopVision()); }
+        });
+
+        // Additional map integration functions
+        function requestRouteForMapping() {
+            // Get route data for map display
+            addLog('Requesting route data for map display...', 'info');
+            fetch('/api/navigation/route', {
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                addLog(`Route API response: success=${data.success}, hasRoute=${!!data.route}`, 'info');
+                if (data.success && data.route) {
+                    addLog(`Route data: geometry=${!!data.route.geometry}, instructions=${data.route.instructions?.length || 0}`, 'info');
+                    displayRouteOnMap(data.route);
+                } else {
+                    addLog(`No route data available: ${data.message || 'Unknown error'}`, 'warning');
+                }
+            })
+            .catch(error => {
+                addLog(`Error getting route for map: ${error.message}`, 'error');
+            });
+        }
+        
+        function clearRouteFromMap() {
+            try {
+                if (routeLine && navigationMap) {
+                    navigationMap.removeLayer(routeLine);
+                    routeLine = null;
+                }
+                
+                if (destinationMarker && navigationMap) {
+                    navigationMap.removeLayer(destinationMarker);
+                    destinationMarker = null;
+                }
+                
+                // Remove instruction markers
+                if (navigationMap && instructionMarkers && instructionMarkers.length) {
+                    instructionMarkers.forEach(m => { try { navigationMap.removeLayer(m); } catch(e){} });
+                    instructionMarkers = [];
+                }
+                
+                // Clean up location marker accuracy circle when navigation ends
+                if (currentLocationMarker && currentLocationMarker.accuracyCircle && navigationMap) {
+                    navigationMap.removeLayer(currentLocationMarker.accuracyCircle);
+                    currentLocationMarker.accuracyCircle = null;
+                }
+                
+                // Hide route info
+                const routeInfo = document.getElementById('route-info');
+                if (routeInfo) {
+                    routeInfo.classList.remove('active');
+                }
+                
+                // Clear route data
+                currentRouteData = null;
+                
+                addLog('Route cleared from map', 'info');
+            } catch (error) {
+                console.error('Error clearing route from map:', error);
+            }
+        }
+        
+        // IP location using server (more reliable re: client IP)
+        async function useIPLocation() {
+            try {
+                const resp = await fetch('/api/location/from-ip', { method: 'POST' });
+                const data = await resp.json();
+                if (data && data.success) {
+                    addLog(`Using IP-based location: ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}`, 'warning');
+                    const fakePosition = { coords: { latitude: data.latitude, longitude: data.longitude, accuracy: 5000 } };
+                    updateLocationOnMap(fakePosition);
+                } else {
+                    addLog(`IP location failed: ${data && data.message ? data.message : 'unknown error'}`, 'error');
+                }
+                refreshStatus();
+            } catch (e) {
+                addLog(`IP location error: ${e.message}`, 'error');
+            }
+        }
+        
+        // Clean up location tracking when page unloads
+        window.addEventListener('beforeunload', function() {
+            if (locationWatchId) {
+                navigator.geolocation.clearWatch(locationWatchId);
+            }
+        });
+        
+        // Debug function to test route display
+        function debugRouteDisplay() {
+            addLog('Testing route display...', 'info');
+            
+            // Simulate route data for testing
+            const testRoute = {
+                geometry: {
+                    type: 'LineString',
+                    coordinates: [
+                        [55.2708, 25.2048], // Dubai coordinates [lng, lat]
+                        [55.2718, 25.2058],
+                        [55.2728, 25.2068],
+                        [55.2738, 25.2078],
+                        [55.2748, 25.2088]
+                    ]
+                },
+                total_distance: 1500,
+                total_duration: 300
+            };
+            
+            displayRouteOnMap(testRoute);
+            addLog('Test route should now be visible on map', 'success');
+        }
+        
+        // Make debug function available globally
+        window.debugRouteDisplay = debugRouteDisplay;
+        
+        // Manual route test function
+        window.testRouteDisplay = function() {
+            addLog('Manual route display test started...', 'info');
+            requestRouteForMapping();
+        };
+        
+        // Test map functionality
+        window.testMap = function() {
+            if (!navigationMap) {
+                addLog('Map not initialized!', 'error');
+                return;
+            }
+            addLog('Map is initialized, testing with simple marker...', 'info');
+            
+            // Add a test marker
+            const testMarker = L.marker([25.2048, 55.2708])
+                .addTo(navigationMap)
+                .bindPopup('Test marker - map is working!');
+            
+            addLog('Test marker added successfully', 'success');
+        };
+        
+        // Force route display with current session
+        window.forceRouteDisplay = function() {
+            addLog('Force route display...', 'info');
+            fetch('/api/navigation/route', {
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                addLog(`Force route response: ${JSON.stringify(data, null, 2)}`, 'info');
+                if (data.success && data.route) {
+                    displayRouteOnMap(data.route);
+                }
+            })
+            .catch(error => {
+                addLog(`Force route error: ${error.message}`, 'error');
+            });
+        };
+        
+        // Manual instruction advance for testing
+        async function manualAdvanceInstruction() {
+            try {
+                if (!isNavigationActive) {
+                    addLog('No active navigation to advance', 'warning');
+                    return;
+                }
+                
+                addLog('Manually advancing to next instruction...', 'info');
+                
+                const response = await fetch('/api/navigation/advance', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog(result.message || 'Advanced to next instruction', 'success');
+                    // Immediately fetch the new instruction
+                    setTimeout(getCurrentNavigationInstruction, 500);
+                } else {
+                    addLog(result.message || 'Failed to advance', 'error');
+                }
+                
+                refreshStatus();
+            } catch (error) {
+                addLog(`Error advancing instruction: ${error.message}`, 'error');
+            }
+        }
+        
+        // Update backend location during navigation
+        // Approximate distance between two lat/lng points in meters
+        function distanceMeters(a, b) {
+            try {
+                const toRad = x => (x * Math.PI) / 180;
+                const R = 6371000;
+                const dLat = toRad(b.lat - a.lat);
+                const dLng = toRad(b.lng - a.lng);
+                const lat1 = toRad(a.lat);
+                const lat2 = toRad(b.lat);
+                const sinDLat = Math.sin(dLat / 2);
+                const sinDLng = Math.sin(dLng / 2);
+                const aVal = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+                const c = 2 * Math.atan2(Math.sqrt(aVal), Math.sqrt(1 - aVal));
+                return R * c;
+            } catch { return Infinity; }
+        }
+        
+        async function updateBackendLocation(lat, lng) {
+            try {
+                // Send updates during navigation; also send initial location once even if not navigating
+                if (!isNavigationActive && lastBackendLocation) {
+                    return;
+                }
+                
+                // Throttle: send at most every 5s and only if moved > 10m (reduced frequency)
+                const now = Date.now();
+                const current = { lat, lng };
+                let movedEnough = true;
+                if (lastBackendLocation) {
+                    const moved = distanceMeters(lastBackendLocation, current);
+                    movedEnough = moved >= 10; // Increased from 5m to 10m
+                }
+                if (!movedEnough || (now - lastBackendUpdateTime) < 5000) { // Increased from 2s to 5s
+                    return;
+                }
+                lastBackendUpdateTime = now;
+                lastBackendLocation = current;
+                
+                await fetch('/api/location', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        latitude: lat,
+                        longitude: lng
+                    })
+                });
+                
+                // Location updated successfully (silent)
+            } catch (error) {
+                console.log('Error updating backend location:', error);
+            }
+        }
+    </script>
+</body>
+</html>

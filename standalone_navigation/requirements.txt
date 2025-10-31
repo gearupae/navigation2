@@ -1,0 +1,22 @@
+# Core dependencies (required)
+requests>=2.31.0
+googlemaps>=4.10.0
+geopy>=2.4.0
+
+# Optional LLM dependencies
+# For Grok LLM (no additional packages needed)
+# For OpenAI LLM
+openai>=1.0.0
+
+# Optional TTS dependencies
+# For Google TTS
+gtts>=2.3.0
+pygame>=2.0.0
+
+# For offline TTS
+pyttsx3>=2.90
+
+# Development dependencies
+pytest>=7.0.0
+black>=22.0.0
+flake8>=5.0.0
