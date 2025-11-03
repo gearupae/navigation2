@@ -1379,8 +1379,8 @@ def get_unified_instruction():
             return any('\u0600' <= ch <= '\u06FF' for ch in s or '')
 
         def translate_arabic_names(text: str) -> str:
-            """Provide an English-friendly fallback when Arabic street names appear.
-            This avoids TTS skipping unreadable names; no external API used.
+            """Simplify instructions by removing Arabic street names.
+            This makes TTS clearer for English speakers.
             """
             if not text:
                 return text
@@ -1388,26 +1388,23 @@ def get_unified_instruction():
                 return text
             
             import re
-            # Replace only Arabic characters (preserve spaces and other text)
-            # Match sequences of Arabic characters (without spaces)
+            # Remove "on [Arabic text]" or "onto [Arabic text]" patterns entirely
+            # This makes instructions simpler: "Start on شارع" → "Start ahead"
+            text_cleaned = re.sub(r'\s+(on|onto)\s+[\u0600-\u06FF\s]+', '', text)
+            
+            # If we removed content, clean up the result
+            if text_cleaned != text:
+                text_cleaned = re.sub(r'\s+', ' ', text_cleaned).strip()
+                # Add simple direction if instruction is now too vague
+                if text_cleaned.lower() in ['start', 'continue', 'turn']:
+                    text_cleaned += ' ahead'
+                return text_cleaned
+            
+            # Fallback: replace Arabic with generic placeholder (if removal didn't work)
             result = re.sub(r'[\u0600-\u06FF]+', '[ARABIC]', text)
-            
-            # Remove duplicate placeholders that might be adjacent with only spaces between
             result = re.sub(r'\[ARABIC\](\s+\[ARABIC\])+', '[ARABIC]', result)
-            
-            # Replace placeholder with readable text
-            result = result.replace('[ARABIC]', 'a local street')
-            
-            # Clean up extra spaces
+            result = result.replace('[ARABIC]', 'the road')
             result = re.sub(r'\s+', ' ', result).strip()
-            
-            # Simplify common patterns
-            result = result.replace('on a local street', 'on the local street')
-            result = result.replace('onto a local street', 'onto the local street')
-            
-            # Add translation note if not already present
-            if 'local street' in result and 'translated' not in result.lower():
-                result = f"{result} (street name translated from Arabic)"
             
             return result
         
