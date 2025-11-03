@@ -187,6 +187,32 @@
     console.log('🚀 [INIT] Page loaded, initializing...');
     initMap();
     
+    // Load voices for Web Speech API
+    if ('speechSynthesis' in window) {
+      // Chrome requires this to load voices
+      window.speechSynthesis.onvoiceschanged = () => {
+        const voices = window.speechSynthesis.getVoices();
+        console.log('✅ [TTS] Loaded', voices.length, 'voices');
+        if (voices.length > 0) {
+          console.log('🎤 [TTS] Default voice:', voices[0].name);
+        }
+      };
+      // Trigger voice loading
+      window.speechSynthesis.getVoices();
+      
+      // Test voice after loading
+      setTimeout(() => {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+          console.log('✅ Total voices loaded:', voices.length);
+          console.log('🎤 English voices available:');
+          voices.filter(v => v.lang.startsWith('en')).forEach((v, idx) => {
+            console.log(`  ${idx+1}. ${v.name} (${v.lang}) ${v.localService ? '[Offline]' : '[Online]'}`);
+          });
+        }
+      }, 1000);
+    }
+    
     // Load current routing mode
     loadRoutingMode();
     
@@ -535,12 +561,10 @@
       // Keep the results visible - don't hide them
       // The navigation instructions are now always visible at the top
       
-      if(pollTimer)clearInterval(pollTimer); if(instrTimer)clearInterval(instrTimer);
-        // Use single consolidated timer for better performance
-        pollTimer=setInterval(consolidatedUpdate,8000);  // Single timer every 8 seconds
+      if(pollTimer)clearInterval(pollTimer); if(instrTimer)clearInterval(instrTimer); if(unifiedTimer)clearInterval(unifiedTimer);
         
-        // Start unified instruction timer - update every 10 seconds
-        unifiedTimer=setInterval(updateUnifiedInstruction,10000);  // Unified instruction every 10 seconds
+        // Use ONLY unified instruction timer (avoids duplicate audio)
+        unifiedTimer=setInterval(updateUnifiedInstruction,15000);  // Update every 15 seconds (longer to prevent overlaps)
         
         // Start real-time location tracking
         startLocationTracking();
@@ -550,9 +574,7 @@
       // Wait a moment for navigation to initialize, then start polling
       setTimeout(() => {
         console.log('Starting instruction polling...');
-        // Use the consolidated update function instead of separate calls
-        consolidatedUpdate();
-        // Also start unified instruction updates
+        // Use unified instruction updates (single source of audio)
         updateUnifiedInstruction();
       }, 1000);
     }catch(e){
@@ -897,6 +919,7 @@
   let lastInstructionText = '';
   let lastTTSInstruction = '';
   let ttsCooldown = false;
+  let isSpeaking = false;  // Global flag to prevent concurrent speech
 
   async function fetchInstruction(){
     try{
@@ -1105,12 +1128,14 @@
         document.getElementById('instructionContext').textContent = data.context || '-';
         
         // Speak the instruction if it's different from what we last spoke
-        if (data.instruction && data.instruction !== '-' && data.instruction !== lastTTSInstruction) {
-          console.log('Speaking unified instruction:', data.instruction);
+        if (data.instruction && data.instruction !== '-' && data.instruction !== lastTTSInstruction && !isSpeaking) {
+          console.log('✅ Speaking unified instruction:', data.instruction);
           lastTTSInstruction = data.instruction;
           ttsCooldown = true;
           await speakText(data.instruction);
-          setTimeout(() => { ttsCooldown = false; }, 3000);
+          setTimeout(() => { ttsCooldown = false; }, 10000);  // 10 second cooldown
+        } else if (isSpeaking) {
+          console.log('⚠️ Already speaking, skipping unified instruction');
         }
       }
       
@@ -1185,16 +1210,26 @@
   let audioQueue = [];
   let isPlaying = false;
   
-  // Function to clear audio queue and stop current audio
+  // Function to clear audio queue and stop current audio/speech
   function clearAudioQueue() {
     audioQueue = [];
+    
+    // Stop browser speech synthesis
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    
+    // Stop old audio if any
     if (currentAudio) {
       currentAudio.pause();
       currentAudio.currentTime = 0;
       currentAudio = null;
     }
+    
     isPlaying = false;
-    console.log('Audio queue cleared');
+    isSpeaking = false;  // Reset global speaking flag
+    ttsCooldown = false;  // Reset cooldown too
+    console.log('Audio queue and speech cleared, all flags reset');
   }
 
   async function speakText(text) {
@@ -1202,6 +1237,12 @@
       console.log('speakText called with:', text);
       if (!text || text.trim() === '') {
         console.log('Empty text, returning');
+        return;
+      }
+      
+      // STRICT: Prevent ANY concurrent speech
+      if (isSpeaking) {
+        console.log('⚠️ Already speaking, skipping:', text);
         return;
       }
       
@@ -1216,11 +1257,12 @@
       audioQueue.push(text);
       lastTTSInstruction = text;
       ttsCooldown = true;
+      isSpeaking = true;  // Set global speaking flag
       
-      // Reset cooldown after 2 seconds
+      // Reset cooldown after 8 seconds (very long to prevent overlaps)
       setTimeout(() => {
         ttsCooldown = false;
-      }, 2000);
+      }, 8000);
       
       // If already playing, just queue it
       if (isPlaying) {
@@ -1233,6 +1275,7 @@
       await processAudioQueue();
     } catch (e) {
       console.log('TTS error:', e);
+      isSpeaking = false;  // Reset flag on error
     }
   }
 
@@ -1240,6 +1283,7 @@
     console.log('processAudioQueue called, queue length:', audioQueue.length);
     if (audioQueue.length === 0) {
       isPlaying = false;
+      isSpeaking = false;  // Reset global speaking flag
       console.log('Audio queue empty, stopping');
       return;
     }
@@ -1249,62 +1293,90 @@
     console.log('Processing audio for text:', text);
     
     try {
-      // Stop any currently playing audio immediately
-      if (currentAudio) {
-        console.log('Stopping current audio');
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        currentAudio = null;
+      // Stop any currently playing speech
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        console.log('Cancelled any previous speech');
       }
       
-      // Wait a moment to ensure previous audio is stopped
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Wait a moment for cleanup
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      console.log('Making TTS API request for:', text);
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text }),
-        credentials: 'include'
-      });
-      
-      console.log('TTS API response status:', response.status);
-      if (response.ok) {
-        console.log('TTS API success, creating audio');
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        currentAudio = new Audio(audioUrl);
+      // Use browser's native Web Speech API (MUCH better quality!)
+      if ('speechSynthesis' in window) {
+        console.log('Using browser Web Speech API for:', text);
         
-        currentAudio.onended = () => {
-          console.log('Audio playback ended');
-          URL.revokeObjectURL(audioUrl);
-          currentAudio = null;
-          // Process next in queue with longer delay
-          setTimeout(processAudioQueue, 500); // Longer delay between messages
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Configure voice settings for MAXIMUM CLARITY
+        utterance.lang = 'en-US';
+        utterance.rate = 0.85;    // Much slower for better understanding
+        utterance.pitch = 1.0;    // Normal pitch
+        utterance.volume = 1.0;   // Maximum volume
+        
+        // Try to use a better voice if available
+        const voices = window.speechSynthesis.getVoices();
+        console.log('🎤 Available voices:', voices.length);
+        
+        // Log all available voices for debugging
+        if (voices.length > 0) {
+          console.log('📋 Voice options:');
+          voices.forEach((v, idx) => {
+            if (v.lang.startsWith('en')) {
+              console.log(`  ${idx}: ${v.name} (${v.lang}) ${v.localService ? '[Offline]' : '[Online]'}`);
+            }
+          });
+        }
+        
+        // Priority order for best voice quality:
+        // 1. Google voices (best quality)
+        // 2. Microsoft Natural/Premium voices
+        // 3. Any online voice (usually better than offline)
+        // 4. Fallback to system voice
+        const preferredVoice = 
+          voices.find(v => v.name.toLowerCase().includes('google') && v.lang === 'en-US') ||
+          voices.find(v => v.name.toLowerCase().includes('google') && v.lang.startsWith('en')) ||
+          voices.find(v => (v.name.toLowerCase().includes('natural') || v.name.toLowerCase().includes('premium')) && v.lang === 'en-US') ||
+          voices.find(v => v.lang === 'en-US' && !v.localService) ||
+          voices.find(v => v.lang === 'en-US') ||
+          voices.find(v => v.lang.startsWith('en')) ||
+          voices[0];
+        
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+          console.log('✅ Using voice:', preferredVoice.name, '|', preferredVoice.lang, '|', preferredVoice.localService ? 'Offline' : 'Online');
+        } else {
+          console.warn('⚠️ No suitable voice found, using browser default');
+        }
+        
+        utterance.onend = () => {
+          console.log('Speech ended, processing next...');
+          // Reset flag before processing next
+          isSpeaking = false;
+          // Process next in queue with delay
+          setTimeout(processAudioQueue, 1500);  // Longer gap
         };
         
-        currentAudio.onerror = (e) => {
-          console.log('Audio playback error:', e);
-          URL.revokeObjectURL(audioUrl);
-          currentAudio = null;
+        utterance.onerror = (e) => {
+          console.log('Speech error:', e);
+          isSpeaking = false;  // Reset flag on error
           // Process next in queue even on error
-          setTimeout(processAudioQueue, 500);
+          setTimeout(processAudioQueue, 1500);
         };
         
-        console.log('Starting audio playback');
-        await currentAudio.play();
-        console.log('Audio playback started');
+        console.log('Starting speech synthesis');
+        window.speechSynthesis.speak(utterance);
+        
       } else {
-        console.log('TTS API error:', response.status);
-        const errorText = await response.text();
-        console.log('TTS API error response:', errorText);
-        // Process next in queue even on error
-        setTimeout(processAudioQueue, 500);
+        console.log('Web Speech API not available, skipping');
+        isSpeaking = false;  // Reset flag
+        setTimeout(processAudioQueue, 1500);
       }
+      
     } catch (e) {
-      console.log('TTS playback error:', e);
-      // Process next in queue even on error
-      setTimeout(processAudioQueue, 500);
+      console.log('Speech processing error:', e);
+      isSpeaking = false;  // Reset flag on error
+      setTimeout(processAudioQueue, 1500);
     }
   }
 
@@ -1867,58 +1939,66 @@ async function testNarrationImprovement() {
 }
 
 async function testTTS() {
-  console.log('=== TESTING TTS SYSTEM ===');
+  console.log('=== TESTING WEB SPEECH TTS ===');
   
   try {
-    // Test basic TTS functionality
-    console.log('Testing basic TTS...');
-    await speakText('TTS test - this is a test message');
+    // Check if Web Speech API is available
+    if (!('speechSynthesis' in window)) {
+      alert('❌ Web Speech API not supported in this browser!');
+      console.error('Web Speech API not available');
+      return;
+    }
     
-    // Test TTS API directly
-    console.log('Testing TTS API directly...');
-    const response = await fetch('/api/tts', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({text: 'Direct TTS API test'}),
-      credentials: 'include'
+    // Get available voices
+    const voices = window.speechSynthesis.getVoices();
+    console.log('📊 Total voices available:', voices.length);
+    
+    if (voices.length === 0) {
+      console.warn('⚠️ No voices loaded yet, waiting...');
+      // Wait for voices to load
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const voicesRetry = window.speechSynthesis.getVoices();
+      if (voicesRetry.length === 0) {
+        alert('❌ No voices available! Browser may not support TTS.');
+        return;
+      }
+    }
+    
+    // Show all English voices
+    console.log('\n🎤 ENGLISH VOICES AVAILABLE:');
+    const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+    englishVoices.forEach((v, idx) => {
+      const quality = v.localService ? '⚡ Offline' : '🌐 Online (Better)';
+      const isGoogle = v.name.toLowerCase().includes('google') ? '⭐ GOOGLE' : '';
+      console.log(`${idx + 1}. ${v.name} (${v.lang}) ${quality} ${isGoogle}`);
     });
     
-    console.log('TTS API response status:', response.status);
-    if (response.ok) {
-      console.log('TTS API working');
-      const audioBlob = await response.blob();
-      console.log('Audio blob size:', audioBlob.size);
+    // Find the voice we'll use
+    const selectedVoice = 
+      voices.find(v => v.name.toLowerCase().includes('google') && v.lang === 'en-US') ||
+      voices.find(v => v.name.toLowerCase().includes('google') && v.lang.startsWith('en')) ||
+      voices.find(v => (v.name.toLowerCase().includes('natural') || v.name.toLowerCase().includes('premium')) && v.lang === 'en-US') ||
+      voices.find(v => v.lang === 'en-US' && !v.localService) ||
+      voices.find(v => v.lang === 'en-US') ||
+      voices.find(v => v.lang.startsWith('en')) ||
+      voices[0];
+    
+    if (selectedVoice) {
+      console.log('\n✅ SELECTED VOICE:', selectedVoice.name);
+      console.log('   Language:', selectedVoice.lang);
+      console.log('   Type:', selectedVoice.localService ? 'Offline' : 'Online');
       
-      // Try to play it
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      audio.onended = () => {
-        console.log('Direct TTS audio ended');
-        URL.revokeObjectURL(audioUrl);
-      };
-      audio.onerror = (e) => {
-        console.log('Direct TTS audio error:', e);
-        URL.revokeObjectURL(audioUrl);
-      };
-      await audio.play();
-      console.log('Direct TTS audio started');
-    } else {
-      const errorText = await response.text();
-      console.log('TTS API error:', errorText);
+      // Show alert to user
+      alert(`🎤 Voice Test\n\nUsing: ${selectedVoice.name}\nLanguage: ${selectedVoice.lang}\nType: ${selectedVoice.localService ? 'Offline' : 'Online'}\n\nListen to the test message...`);
     }
     
-    // Test current instruction speaking
-    console.log('Testing current instruction speaking...');
-    const currentInstruction = document.getElementById('unifiedInstruction').textContent;
-    if (currentInstruction && currentInstruction !== '-') {
-      console.log('Speaking current instruction:', currentInstruction);
-      await speakText('Current instruction: ' + currentInstruction);
-    } else {
-      console.log('No current instruction to speak');
-    }
+    // Test with a clear message
+    console.log('\n🔊 Speaking test message...');
+    await speakText('Hello, this is a voice quality test. Drive 50 meters straight ahead, then turn right.');
     
   } catch (e) {
     console.error('TTS test failed:', e);
+    alert('❌ TTS test error: ' + e.message);
   }
 }
 

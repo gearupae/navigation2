@@ -1476,33 +1476,37 @@ def get_unified_instruction():
                     good_example = "'Drive 500 meters ahead, then turn right.'"
                     avoid_rules = "- Use driving terms (drive, turn, merge, exit)\n- NO walking/stepping references"
 
+                # Build mode-appropriate examples
+                if is_walking:
+                    obstacle_example = "Obstacles: chair desk ahead, move slightly left, then walk 120 steps straight."
+                    no_obstacle_example = "Walk 120 steps straight ahead for 84 meters."
+                    action_verb = "Walk"
+                else:
+                    obstacle_example = "Obstacles detected ahead, move left, then continue driving."
+                    no_obstacle_example = "Drive 48 meters straight ahead."
+                    action_verb = "Drive"
+                
                 prompt = (
                     f"You are a navigation assistant for a {user_type}. "
                     "Create ONE natural, conversational sentence for audio guidance. "
-                    "CRITICAL RULES FOR BLIND USERS:\n"
-                    "**STRICT ORDER - MUST FOLLOW:**\n"
-                    "IF OBSTACLES DETECTED:\n"
-                    "  1. START: 'Obstacle detected on your [left/right/ahead]'\n"
-                    "  2. THEN: 'move [left/right]'\n"
-                    "  3. THEN: 'then walk [X] steps [direction]'\n"
-                    "IF NO OBSTACLES:\n"
-                    "  1. START: 'Walk [X] steps [direction]'\n\n"
-                    "**OBSTACLE RULES:**\n"
-                    "- NEVER say 'Walk' BEFORE mentioning obstacles!\n"
-                    "- For TESTING: Include obstacle names from vision data\n"
-                    "- Format: 'Obstacles: [list names], move [direction]'\n\n"
-                    "**FORMATTING:**\n"
-                    "- Simple, natural English\n"
-                    "- NEVER use: watch, see, look\n"
-                    "- Maximum 20 words\n"
-                    f"{avoid_rules}\n\n"
                     f"Mode: {routing_mode.upper()}\n"
                     f"Route: {compact_map}\n"
                     f"Vision: {vision_line}\n"
                     f"{distance_info}\n\n"
-                    f"CORRECT with obstacle: 'Obstacles: chair desk ahead, move slightly left, then walk 120 steps straight.'\n"
-                    f"WRONG with obstacle: 'Walk 120 steps. Obstacles ahead...' (BAD! Obstacles must come FIRST!)\n"
-                    f"CORRECT without obstacle: 'Walk 120 steps straight ahead for 84 meters.'\n\n"
+                    "CRITICAL RULES:\n"
+                    "IF OBSTACLES DETECTED:\n"
+                    "  1. START: 'Obstacle detected on your [left/right/ahead]'\n"
+                    "  2. THEN: 'move [left/right]'\n"
+                    f"  3. THEN: 'then {action_verb.lower()} ahead'\n"
+                    "IF NO OBSTACLES:\n"
+                    f"  1. START with distance: '{action_verb} [distance] [direction]'\n\n"
+                    "FORMATTING:\n"
+                    "- Simple, natural English\n"
+                    "- NEVER use: watch, see, look\n"
+                    "- Maximum 15 words\n"
+                    f"{avoid_rules}\n\n"
+                    f"CORRECT with obstacle: '{obstacle_example}'\n"
+                    f"CORRECT without obstacle: '{no_obstacle_example}'\n\n"
                     "Your sentence:"
                 )
                 url = os.getenv('GROK_API_BASE', 'https://api.x.ai/v1/chat/completions')
@@ -1549,27 +1553,60 @@ def get_unified_instruction():
                 
             except requests.exceptions.Timeout:
                 logger.warning("⏱️  [LLM] Timeout after 5s - using fast fallback")
-                # Create instant fallback instruction
+                # Create instant fallback instruction (mode-aware)
                 if vision_enabled and hazards and len(hazards) > 0:
-                    instruction = f"STOP! Obstacle detected. Move {steer}, then walk {steps_remaining} steps."
+                    action = "drive" if not is_walking else "walk"
+                    instruction = f"STOP! Obstacle detected. Move {steer}, then {action} ahead."
                 else:
-                    instruction = f"Walk {steps_remaining} steps {compact_map}" if steps_remaining > 0 else f"Continue {compact_map}"
+                    if is_walking and steps_remaining > 0:
+                        instruction = f"Walk {steps_remaining} steps. {compact_map}"
+                    else:
+                        # Driving mode: include distance in instruction
+                        if meters > 0:
+                            if meters >= 1000:
+                                instruction = f"Drive {meters/1000:.1f} kilometers. {compact_map}"
+                            else:
+                                instruction = f"Drive {meters} meters. {compact_map}"
+                        else:
+                            instruction = compact_map if compact_map else "Continue straight ahead."
                 context = context + ' (fast fallback)'
             except requests.exceptions.HTTPError as e:
                 logger.error(f"❌ [LLM] API error: {e.response.status_code}")
-                # Create instant fallback instruction
+                # Create instant fallback instruction (mode-aware)
                 if vision_enabled and hazards and len(hazards) > 0:
-                    instruction = f"STOP! Obstacle detected. Move {steer}, then walk {steps_remaining} steps."
+                    action = "drive" if not is_walking else "walk"
+                    instruction = f"STOP! Obstacle detected. Move {steer}, then {action} ahead."
                 else:
-                    instruction = f"Walk {steps_remaining} steps {compact_map}" if steps_remaining > 0 else f"Continue {compact_map}"
+                    if is_walking and steps_remaining > 0:
+                        instruction = f"Walk {steps_remaining} steps. {compact_map}"
+                    else:
+                        # Driving mode: include distance in instruction
+                        if meters > 0:
+                            if meters >= 1000:
+                                instruction = f"Drive {meters/1000:.1f} kilometers. {compact_map}"
+                            else:
+                                instruction = f"Drive {meters} meters. {compact_map}"
+                        else:
+                            instruction = compact_map if compact_map else "Continue straight ahead."
                 context = context + ' (error fallback)'
             except Exception as e:
                 logger.error(f"❌ [LLM] Failed: {str(e)}")
-                # Create instant fallback instruction
+                # Create instant fallback instruction (mode-aware)
                 if vision_enabled and hazards and len(hazards) > 0:
-                    instruction = f"STOP! Obstacle detected. Move {steer}, then walk {steps_remaining} steps."
+                    action = "drive" if not is_walking else "walk"
+                    instruction = f"STOP! Obstacle detected. Move {steer}, then {action} ahead."
                 else:
-                    instruction = f"Walk {steps_remaining} steps {compact_map}" if steps_remaining > 0 else f"Continue {compact_map}"
+                    if is_walking and steps_remaining > 0:
+                        instruction = f"Walk {steps_remaining} steps. {compact_map}"
+                    else:
+                        # Driving mode: include distance in instruction
+                        if meters > 0:
+                            if meters >= 1000:
+                                instruction = f"Drive {meters/1000:.1f} kilometers. {compact_map}"
+                            else:
+                                instruction = f"Drive {meters} meters. {compact_map}"
+                        else:
+                            instruction = compact_map if compact_map else "Continue straight ahead."
                 context = context + ' (fallback)'
 
         # Prepare response

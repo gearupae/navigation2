@@ -17,7 +17,7 @@ from services.osm_navigation_service import OSMNavigationService
 from services.speech_service import SpeechService
 from services.location_manager import LocationManager
 from services.cache_service import CacheService
-from services.mock_services import MockPlacesService, MockNavigationService
+# Mock services only imported when test_mode=True (see __init__ below)
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -37,9 +37,14 @@ class NavigationController:
                 self.places_service = OSMPlacesService()  # FREE Nominatim for place search
                 self.navigation_service = OSMNavigationService()  # FREE OSRM for navigation
             else:
-                # Use mock services in test mode
-                self.places_service = MockPlacesService()
-                self.navigation_service = MockNavigationService()
+                # Use mock services in test mode (lazy import to avoid requiring the file)
+                try:
+                    from services.mock_services import MockPlacesService, MockNavigationService
+                    self.places_service = MockPlacesService()
+                    self.navigation_service = MockNavigationService()
+                except ImportError:
+                    logger.error("Mock services not available - test mode cannot be used")
+                    raise RuntimeError("Test mode requires mock_services.py file")
             self.speech_service = SpeechService()
             self.location_manager = LocationManager()
             self.cache_service = CacheService()
