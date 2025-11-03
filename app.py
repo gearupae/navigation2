@@ -1130,9 +1130,20 @@ def make_route_instruction_brief(instruction: str) -> str:
     """Make route instructions more concise for real-time navigation"""
     # Remove distance details for smoother navigation
     import re
-    brief = re.sub(r'\d+\s*(meters?|m|feet?|ft)', '', instruction, flags=re.IGNORECASE)
-    brief = re.sub(r'\bin\s+\d+\s*(meters?|m|feet?|ft)', '', brief, flags=re.IGNORECASE)
+    
+    # Remove "In X meters" patterns
+    brief = re.sub(r'\bin\s+\d+\s*(meters?|m|feet?|ft)[,\s]*', '', instruction, flags=re.IGNORECASE)
+    # Remove standalone distance mentions
+    brief = re.sub(r'\d+\s*(meters?|m|feet?|ft)', '', brief, flags=re.IGNORECASE)
+    
+    # Remove leftover "In," or "in," at start
+    brief = re.sub(r'^in[,\s]+', '', brief, flags=re.IGNORECASE)
+    
+    # Clean up multiple spaces and commas
+    brief = re.sub(r'\s*,\s*', ', ', brief)  # Fix comma spacing
+    brief = re.sub(r',\s*,', ',', brief)  # Remove double commas
     brief = re.sub(r'\s+', ' ', brief).strip()
+    brief = brief.strip(',').strip()  # Remove leading/trailing commas
     
     # Make it more actionable
     if 'turn right' in brief.lower():
@@ -1141,6 +1152,9 @@ def make_route_instruction_brief(instruction: str) -> str:
         return 'Turn left when you reach the intersection'
     elif 'straight' in brief.lower():
         return 'Continue straight ahead'
+    elif 'start' in brief.lower() and 'on' in brief.lower():
+        # Keep start instructions simple
+        return brief
     else:
         return brief
 
@@ -1372,21 +1386,29 @@ def get_unified_instruction():
                 return text
             if not contains_arabic(text):
                 return text
-            cleaned = []
-            in_ar = False
-            for ch in text:
-                if '\u0600' <= ch <= '\u06FF':
-                    if not in_ar:
-                        # Start of Arabic block: inject generic label once
-                        cleaned.append('the street')
-                        in_ar = True
-                    # swallow Arabic chars
-                else:
-                    in_ar = False
-                    cleaned.append(ch)
-            result = ''.join(cleaned)
-            if '(translated from Arabic)' not in result:
-                result = f"{result} (translated from Arabic)"
+            
+            import re
+            # Replace only Arabic characters (preserve spaces and other text)
+            # Match sequences of Arabic characters (without spaces)
+            result = re.sub(r'[\u0600-\u06FF]+', '[ARABIC]', text)
+            
+            # Remove duplicate placeholders that might be adjacent with only spaces between
+            result = re.sub(r'\[ARABIC\](\s+\[ARABIC\])+', '[ARABIC]', result)
+            
+            # Replace placeholder with readable text
+            result = result.replace('[ARABIC]', 'a local street')
+            
+            # Clean up extra spaces
+            result = re.sub(r'\s+', ' ', result).strip()
+            
+            # Simplify common patterns
+            result = result.replace('on a local street', 'on the local street')
+            result = result.replace('onto a local street', 'onto the local street')
+            
+            # Add translation note if not already present
+            if 'local street' in result and 'translated' not in result.lower():
+                result = f"{result} (street name translated from Arabic)"
+            
             return result
         
         # ONLY create fallback instruction if vision is OFF or LLM will fail
@@ -1559,14 +1581,17 @@ def get_unified_instruction():
                     instruction = f"STOP! Obstacle detected. Move {steer}, then {action} ahead."
                 else:
                     if is_walking and steps_remaining > 0:
-                        instruction = f"Walk {steps_remaining} steps. {compact_map}"
+                        # Walking mode: combine steps + direction smoothly
+                        action = compact_map.lower() if compact_map else "continue"
+                        instruction = f"Walk {steps_remaining} steps, then {action}."
                     else:
                         # Driving mode: include distance in instruction
                         if meters > 0:
+                            action = compact_map.lower() if compact_map else "continue straight"
                             if meters >= 1000:
-                                instruction = f"Drive {meters/1000:.1f} kilometers. {compact_map}"
+                                instruction = f"Drive {meters/1000:.1f} kilometers, then {action}."
                             else:
-                                instruction = f"Drive {meters} meters. {compact_map}"
+                                instruction = f"Drive {meters} meters, then {action}."
                         else:
                             instruction = compact_map if compact_map else "Continue straight ahead."
                 context = context + ' (fast fallback)'
@@ -1578,14 +1603,17 @@ def get_unified_instruction():
                     instruction = f"STOP! Obstacle detected. Move {steer}, then {action} ahead."
                 else:
                     if is_walking and steps_remaining > 0:
-                        instruction = f"Walk {steps_remaining} steps. {compact_map}"
+                        # Walking mode: combine steps + direction smoothly
+                        action = compact_map.lower() if compact_map else "continue"
+                        instruction = f"Walk {steps_remaining} steps, then {action}."
                     else:
                         # Driving mode: include distance in instruction
                         if meters > 0:
+                            action = compact_map.lower() if compact_map else "continue straight"
                             if meters >= 1000:
-                                instruction = f"Drive {meters/1000:.1f} kilometers. {compact_map}"
+                                instruction = f"Drive {meters/1000:.1f} kilometers, then {action}."
                             else:
-                                instruction = f"Drive {meters} meters. {compact_map}"
+                                instruction = f"Drive {meters} meters, then {action}."
                         else:
                             instruction = compact_map if compact_map else "Continue straight ahead."
                 context = context + ' (error fallback)'
@@ -1597,14 +1625,17 @@ def get_unified_instruction():
                     instruction = f"STOP! Obstacle detected. Move {steer}, then {action} ahead."
                 else:
                     if is_walking and steps_remaining > 0:
-                        instruction = f"Walk {steps_remaining} steps. {compact_map}"
+                        # Walking mode: combine steps + direction smoothly
+                        action = compact_map.lower() if compact_map else "continue"
+                        instruction = f"Walk {steps_remaining} steps, then {action}."
                     else:
                         # Driving mode: include distance in instruction
                         if meters > 0:
+                            action = compact_map.lower() if compact_map else "continue straight"
                             if meters >= 1000:
-                                instruction = f"Drive {meters/1000:.1f} kilometers. {compact_map}"
+                                instruction = f"Drive {meters/1000:.1f} kilometers, then {action}."
                             else:
-                                instruction = f"Drive {meters} meters. {compact_map}"
+                                instruction = f"Drive {meters} meters, then {action}."
                         else:
                             instruction = compact_map if compact_map else "Continue straight ahead."
                 context = context + ' (fallback)'
