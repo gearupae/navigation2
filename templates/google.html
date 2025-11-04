@@ -126,6 +126,47 @@
         updateRoutingModeUI(data.mode, data.mode_name);
         setStatus(`Routing mode: ${data.mode_name}`);
         console.log(`✅ Routing mode set to: ${data.mode_name}`);
+        
+        // Stop current navigation if active (route is no longer valid for new mode)
+        try {
+          console.log('🛑 Stopping current navigation (mode changed)...');
+          await fetch('/api/stop', {
+            method: 'POST',
+            headers: getSessionHeaders(),
+            credentials: 'include'
+          });
+          
+          // Clear UI
+          document.getElementById('unifiedInstruction').textContent = '-';
+          document.getElementById('unifiedDistance').textContent = '-';
+          document.getElementById('unifiedTime').textContent = '-';
+          
+          // Clear route from map
+          if (routeLine) {
+            map.removeLayer(routeLine);
+            routeLine = null;
+          }
+          
+          console.log('✅ Navigation stopped due to mode change');
+        } catch (e) {
+          console.warn('Failed to stop navigation:', e);
+        }
+        
+        // Clear cache when mode changes to force route recalculation
+        try {
+          console.log('🗑️ Clearing cache to force route recalculation with new mode...');
+          await fetch('/api/cache/clear', {
+            method: 'POST',
+            headers: getSessionHeaders(),
+            credentials: 'include'
+          });
+          console.log('✅ Cache cleared - next navigation will use new routing mode');
+        } catch (e) {
+          console.warn('Failed to clear cache:', e);
+        }
+        
+        // Notify user
+        await speakText(`Switched to ${data.mode_name} mode. Navigate again to get new route.`);
       } else {
         console.error('Failed to set routing mode:', data.message);
         setStatus(`Error: ${data.message}`);
