@@ -479,13 +479,13 @@ class NavigationController:
             
             self.speech_service.speak(f"Starting navigation to {place['name']}...")
             
-            # Check for cached route
-            cached_route = self.cache_service.get_cached_route(current_location, place['location'])
+            # Check for cached route (include routing mode in cache lookup)
+            cached_route = self.cache_service.get_cached_route(current_location, place['location'], profile=self.routing_mode)
             
             # Only reuse cache if it matches current navigation engine (OSRM)
             if cached_route and isinstance(cached_route, dict) and cached_route.get('engine') == 'osrm':
                 route = cached_route
-                logger.info("Using cached route")
+                logger.info(f"Using cached route for {self.routing_mode.upper()} mode")
                 # Important: Store the cached route in the navigation service
                 self.navigation_service.current_route = cached_route
                 self.navigation_service.current_step_index = 0
@@ -497,7 +497,7 @@ class NavigationController:
                 route = self.navigation_service.get_directions(current_location, place['location'], profile=self.routing_mode)
                 if route:
                     logger.info(f"✅ [NAVIGATION] Route received: {route.get('distance', 0)}m, {route.get('duration', 0)}s")
-                    self.cache_service.cache_route(current_location, place['location'], route)
+                    self.cache_service.cache_route(current_location, place['location'], route, profile=self.routing_mode)
             
             if not route:
                 self.speech_service.speak("Unable to calculate route. Please try again.")
@@ -930,16 +930,16 @@ class NavigationController:
                 logger.info("User appears to be off route, auto-rerouting...")
                 self.speech_service.speak("Recalculating route...", priority="high")
                 
-                # Get new route from current location to destination
+                # Get new route from current location to destination (use current routing mode)
                 route = self.navigation_service.get_directions(
                     current_location, 
                     self.current_destination['location'], 
-                    profile='foot'
+                    profile=self.routing_mode
                 )
                 
                 if route:
-                    # Update cache with new route
-                    self.cache_service.cache_route(current_location, self.current_destination['location'], route)
+                    # Update cache with new route (include routing mode)
+                    self.cache_service.cache_route(current_location, self.current_destination['location'], route, profile=self.routing_mode)
                     
                     # Reset navigation state to beginning of new route
                     self.navigation_service.current_route = route
@@ -1014,8 +1014,8 @@ class NavigationController:
             route = self.navigation_service.get_directions(current_location, self.current_destination['location'], profile=self.routing_mode)
             
             if route:
-                # Update cache with new route
-                self.cache_service.cache_route(current_location, self.current_destination['location'], route)
+                # Update cache with new route (include routing mode)
+                self.cache_service.cache_route(current_location, self.current_destination['location'], route, profile=self.routing_mode)
                 
                 # Reset navigation state to beginning of new route
                 self.navigation_service.current_route = route

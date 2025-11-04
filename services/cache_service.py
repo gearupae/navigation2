@@ -390,25 +390,33 @@ class CacheService:
         })
         return self.get(cache_key)
     
-    def cache_route(self, start: Dict, end: Dict, route_data: Dict) -> bool:
-        """Cache navigation route"""
+    def cache_route(self, start: Dict, end: Dict, route_data: Dict, profile: str = 'foot') -> bool:
+        """Cache navigation route (includes routing mode in key)"""
         cache_key = self._generate_cache_key('route', {
             'start_lat': round(start['lat'], 4),
             'start_lng': round(start['lng'], 4),
             'end_lat': round(end['lat'], 4),
-            'end_lng': round(end['lng'], 4)
+            'end_lng': round(end['lng'], 4),
+            'profile': profile  # Include routing mode in cache key!
         })
+        logger.info(f"Caching route with profile: {profile}")
         return self.set(cache_key, route_data, ttl=3600)  # 1 hour
     
-    def get_cached_route(self, start: Dict, end: Dict) -> Optional[Dict]:
-        """Get cached navigation route"""
+    def get_cached_route(self, start: Dict, end: Dict, profile: str = 'foot') -> Optional[Dict]:
+        """Get cached navigation route (checks routing mode)"""
         cache_key = self._generate_cache_key('route', {
             'start_lat': round(start['lat'], 4),
             'start_lng': round(start['lng'], 4),
             'end_lat': round(end['lat'], 4),
-            'end_lng': round(end['lng'], 4)
+            'end_lng': round(end['lng'], 4),
+            'profile': profile  # Include routing mode in cache key!
         })
-        return self.get(cache_key)
+        cached = self.get(cache_key)
+        if cached:
+            logger.info(f"Cache hit for profile: {profile}")
+        else:
+            logger.info(f"Cache miss for profile: {profile}")
+        return cached
     
     def cache_geocoding(self, address: str, result: Dict) -> bool:
         """Cache geocoding results"""
